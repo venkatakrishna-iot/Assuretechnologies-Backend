@@ -21,6 +21,11 @@ const allowedOrigins = [
   'https://lightslategrey-rook-993968.hostingersite.com',
   'https://pink-wildcat-563887.hostingersite.com',
   'https://lightgoldenrodyellow-moose-158912.hostingersite.com',
+  'https://partner.roboticnaturalautofarming.com',
+  'https://technician.roboticnaturalautofarming.com',
+  'https://vendor.roboticnaturalautofarming.com/login',
+  'https://masteradmin.roboticnaturalautofarming.com',
+  'https://roboticnaturalautofarming.com'
 ];
 
 // Middleware
