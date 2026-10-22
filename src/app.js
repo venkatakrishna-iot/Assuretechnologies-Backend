@@ -5,6 +5,8 @@ const cookieParser = require('cookie-parser');
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 const allowedOrigins = [
   'http://localhost:5173', // Admin
   'http://localhost:3000',
@@ -23,7 +25,7 @@ const allowedOrigins = [
   'https://lightgoldenrodyellow-moose-158912.hostingersite.com',
   'https://partner.roboticnaturalautofarming.com',
   'https://technician.roboticnaturalautofarming.com',
-  'https://vendor.roboticnaturalautofarming.com/login',
+  'https://vendor.roboticnaturalautofarming.com',
   'https://masteradmin.roboticnaturalautofarming.com',
   'https://roboticnaturalautofarming.com'
 ];
