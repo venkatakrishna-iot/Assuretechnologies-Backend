@@ -174,10 +174,14 @@ const partnerRegisterSchema = z.object({
 });
 
 const technicianSetPasswordSchema = z.object({
-  email: emailValidation,
+  mobile: mobileValidation.optional(),
+  email: emailValidation.optional(),
   old_password: loginPasswordValidation,
   new_password: strictPasswordValidation,
   confirm_password: z.string({ required_error: 'Please confirm your new password' })
+}).refine(data => data.mobile || data.email, {
+  message: 'Either mobile or email is required',
+  path: ['mobile']
 }).refine(data => data.new_password === data.confirm_password, {
   message: 'Passwords do not match',
   path: ['confirm_password']
@@ -187,10 +191,14 @@ const technicianSetPasswordSchema = z.object({
 });
 
 const partnerSetPasswordSchema = z.object({
-  email: emailValidation,
+  mobile: mobileValidation.optional(),
+  email: emailValidation.optional(),
   old_password: loginPasswordValidation,
   new_password: strictPasswordValidation,
   confirm_password: z.string({ required_error: 'Please confirm your new password' })
+}).refine(data => data.mobile || data.email, {
+  message: 'Either mobile or email is required',
+  path: ['mobile']
 }).refine(data => data.new_password === data.confirm_password, {
   message: 'Passwords do not match',
   path: ['confirm_password']

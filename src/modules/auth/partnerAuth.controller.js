@@ -25,9 +25,9 @@ const login = asyncHandler(async (req, res) => {
 });
 
 const setPassword = asyncHandler(async (req, res) => {
-  const { email, old_password, new_password } = req.body;
+  const { mobile, email, old_password, new_password } = req.body;
 
-  const data = await partnerAuthService.setPassword(email, old_password, new_password);
+  const data = await partnerAuthService.setPassword(mobile, email, old_password, new_password);
 
   res.cookie('partner_token', data.token, {
     httpOnly: true,

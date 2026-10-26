@@ -39,10 +39,14 @@ const login = async (mobile, email, password) => {
   return { user: userData, token, requiresPasswordChange: false };
 };
 
-const setPassword = async (email, old_password, new_password) => {
-  const user = await Technician.findOne({ where: { email } });
+const setPassword = async (mobile, email, old_password, new_password) => {
+  if (!mobile && !email) {
+    throw new AppError('Mobile or email is required', 400);
+  }
+  const whereClause = mobile ? { mobile } : { email };
+  const user = await Technician.findOne({ where: whereClause });
   if (!user) {
-    throw new AppError('User not found', 404);
+    throw new AppError('Technician not found', 404);
   }
 
   const isMatch = await comparePassword(old_password, user.password_hash);
