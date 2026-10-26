@@ -174,8 +174,10 @@ const getPayoutsOverview = async (vendorId) => {
 
   const totalPendingAmount = unpaidItems.reduce((sum, it) => {
     const sub = parseFloat(it.subtotal || 0);
-    const comm = parseFloat(it.admin_commission || 0);
-    return sum + (sub - comm > 0 ? sub - comm : sub);
+    const commRate = parseFloat(it.admin_commission || 0);
+    const commAmt = Math.round((sub * (commRate / 100)) * 100) / 100;
+    const net = sub - commAmt > 0 ? sub - commAmt : sub;
+    return sum + net;
   }, 0);
 
   return {
@@ -212,8 +214,9 @@ const getPayoutOrders = async (vendorId) => {
 
   return items.map(item => {
     const subtotal = parseFloat(item.subtotal || 0);
-    const comm = parseFloat(item.admin_commission || 0);
-    const netAmount = subtotal - comm > 0 ? subtotal - comm : subtotal;
+    const commRate = parseFloat(item.admin_commission || 0);
+    const commAmt = Math.round((subtotal * (commRate / 100)) * 100) / 100;
+    const netAmount = subtotal - commAmt > 0 ? subtotal - commAmt : subtotal;
 
     return {
       id: item.id,
@@ -229,7 +232,8 @@ const getPayoutOrders = async (vendorId) => {
         : 'In Progress',
       amount: netAmount,
       grossAmount: subtotal,
-      adminCommission: comm,
+      adminCommission: commAmt,
+      adminCommissionRate: commRate,
       status: item.is_vendor_paid ? 'Completed' : ((item.status === 'COMPLETED' || item.order?.status === 'COMPLETED') ? 'Pending Admin Payout' : 'In Progress'),
       adminReceived: item.order?.payment_status === 'PAID',
       vendorReceived: item.is_vendor_paid,

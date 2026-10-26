@@ -524,7 +524,8 @@ const getPaymentSummary = async () => {
 
   unpaidItems.forEach(item => {
     const subtotal = parseFloat(item.subtotal || 0);
-    const commission = parseFloat(item.admin_commission || 0);
+    const commRate = parseFloat(item.admin_commission || 0);
+    const commission = Math.round((subtotal * (commRate / 100)) * 100) / 100;
     totalPendingVendorPayout += (subtotal - commission > 0 ? subtotal - commission : subtotal);
     totalAdminCommissionPending += commission;
   });
@@ -762,17 +763,15 @@ const getVendorLedger = async (search = '') => {
     const paidByCustomerItems = vItems.filter(it => it.order?.payment_status === 'PAID' && isItemDelivered(it));
     const unpaidByCustomerItems = vItems.filter(it => !(it.order?.payment_status === 'PAID' && isItemDelivered(it)));
 
-    const totalPendingCustomerPaid = paidByCustomerItems.reduce((sum, it) => {
+    const calcPending = (items) => items.reduce((sum, it) => {
       const sub = parseFloat(it.subtotal || 0);
-      const comm = parseFloat(it.admin_commission || 0);
+      const commRate = parseFloat(it.admin_commission || 0);
+      const comm = Math.round((sub * (commRate / 100)) * 100) / 100;
       return sum + (sub - comm > 0 ? sub - comm : sub);
     }, 0);
 
-    const totalPendingCustomerUnpaid = unpaidByCustomerItems.reduce((sum, it) => {
-      const sub = parseFloat(it.subtotal || 0);
-      const comm = parseFloat(it.admin_commission || 0);
-      return sum + (sub - comm > 0 ? sub - comm : sub);
-    }, 0);
+    const totalPendingCustomerPaid = calcPending(paidByCustomerItems);
+    const totalPendingCustomerUnpaid = calcPending(unpaidByCustomerItems);
 
     return {
       vendorId: v.id,
@@ -783,16 +782,22 @@ const getVendorLedger = async (search = '') => {
       pendingPayoutCount: paidByCustomerItems.length,
       totalPendingCustomerPaid: Math.round(totalPendingCustomerPaid * 100) / 100,
       totalPendingCustomerUnpaid: Math.round(totalPendingCustomerUnpaid * 100) / 100,
-      orders: vItems.map(it => ({
-        id: it.id,
-        orderNumber: it.order?.order_number,
-        productName: it.product?.name,
-        qty: it.qty,
-        date: it.createdAt ? it.createdAt.toISOString().split('T')[0] : '',
-        amount: parseFloat(it.subtotal || 0),
-        adminCommission: parseFloat(it.admin_commission || 0),
-        customerPaid: it.order?.payment_status === 'PAID'
-      }))
+      orders: vItems.map(it => {
+        const sub = parseFloat(it.subtotal || 0);
+        const commRate = parseFloat(it.admin_commission || 0);
+        const commAmt = Math.round((sub * (commRate / 100)) * 100) / 100;
+        return {
+          id: it.id,
+          orderNumber: it.order?.order_number,
+          productName: it.product?.name,
+          qty: it.qty,
+          date: it.createdAt ? it.createdAt.toISOString().split('T')[0] : '',
+          amount: sub,
+          adminCommission: commAmt,
+          adminCommissionRate: commRate,
+          customerPaid: it.order?.payment_status === 'PAID'
+        };
+      })
     };
   });
 
