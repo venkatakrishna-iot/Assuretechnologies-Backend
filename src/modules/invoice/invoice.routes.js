@@ -6,6 +6,7 @@ const { validateRequest } = require('../../middleware/validate.middleware');
 const invoiceSchemas = require('./invoice.validation');
 
 // Vendor routes
+router.get('/vendor', authMiddleware(['vendor']), invoiceController.getVendorInvoices);
 router.post('/vendor/orders/:orderId', authMiddleware(['vendor']), validateRequest(invoiceSchemas.createInvoiceSchema), invoiceController.createVendorInvoice);
 
 // Admin routes

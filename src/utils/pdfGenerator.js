@@ -20,9 +20,13 @@ function generateHeader(doc) {
     .fillColor('#444444')
     .fontSize(20)
     .text('Assure Technologies', 50, 57)
-    .fontSize(10)
-    .text('Amaravathi', 200, 65, { align: 'right' })
-    .text('Guntur, Andhra Pradesh, 522001', 200, 80, { align: 'right' })
+    .fontSize(9)
+    .font('Helvetica')
+    .text('1st Floor, 5-15 Shop No 1, Dandu Venkata Ramaiah Commercial', 180, 55, { align: 'right' })
+    .text('A Konduru, NTR District, Andhra Pradesh - 521227', 180, 70, { align: 'right' })
+    .font('Helvetica-Bold')
+    .text('GSTIN: 37DJPPN2516B1Z9', 180, 85, { align: 'right' })
+    .font('Helvetica')
     .moveDown();
 }
 
@@ -92,16 +96,30 @@ function generateCustomerInformation(doc, invoiceData) {
   generateHr(doc, 185);
 
   const customerInformationTop = 200;
+  let infoY = customerInformationTop;
+
+  const orderNum = invoiceData.order_number;
+  if (orderNum) {
+    const isService = invoiceData.is_service || String(orderNum).startsWith('SR-') || String(orderNum).startsWith('BKG-');
+    const orderLabel = isService ? 'SR Number:' : 'Order Number:';
+    doc
+      .fontSize(10)
+      .font('Helvetica')
+      .text(orderLabel, 50, infoY)
+      .font('Helvetica-Bold')
+      .text(String(orderNum), 150, infoY);
+    infoY += 15;
+  }
 
   doc
     .fontSize(10)
     .font('Helvetica')
-    .text('Invoice Number:', 50, customerInformationTop)
+    .text('Invoice Number:', 50, infoY)
     .font('Helvetica-Bold')
-    .text(invoiceData.invoice_number || 'N/A', 150, customerInformationTop)
+    .text(invoiceData.invoice_number || 'N/A', 150, infoY)
     .font('Helvetica')
-    .text('Invoice Date:', 50, customerInformationTop + 15)
-    .text(new Date().toLocaleDateString(), 150, customerInformationTop + 15);
+    .text('Invoice Date:', 50, infoY + 15)
+    .text(new Date().toLocaleDateString(), 150, infoY + 15);
     
   const billToX = 300;
   const billToWidth = 240;
@@ -130,7 +148,7 @@ function generateCustomerInformation(doc, invoiceData) {
     currentY += doc.heightOfString(customer.mobile, { width: billToWidth }) + 4;
   }
 
-  const hrY = Math.max(260, currentY + 10);
+  const hrY = Math.max(260, Math.max(currentY, infoY + 25) + 10);
   generateHr(doc, hrY);
 
   return hrY;

@@ -81,7 +81,7 @@ const getAdminInvoices = async () => {
   const invoices = await Invoice.findAll({
     include: [
       { model: InvoiceItem, as: 'items' },
-      { model: Vendor, as: 'vendor', attributes: ['id', 'business_name', 'full_name'] }
+      { model: Vendor, as: 'vendor', attributes: ['id', 'business_name', 'full_name', 'gst_number'] }
     ],
     order: [['createdAt', 'DESC']]
   });
@@ -105,6 +105,7 @@ const getAdminInvoices = async () => {
 
     if (json.type === 'VENDOR') {
       json.sold_by = json.vendor ? (json.vendor.business_name || json.vendor.full_name) : 'Assure Technologies';
+      json.vendor_gstin = json.vendor ? json.vendor.gst_number : '';
       json.product_name = (json.items && json.items.length > 0 && json.items[0].description)
         ? json.items.map(i => i.description).filter(Boolean).join(', ')
         : 'Product';
@@ -223,6 +224,7 @@ const createServiceInvoice = async (invoiceData) => {
 
     const pdfInvoiceData = {
       invoice_number: invoice.invoice_number,
+      order_number: invoice.order_id,
       customer: {
         name: invoice.customer_name,
         mobile: invoice.mobile,
@@ -398,6 +400,8 @@ const generateServiceInvoicePdf = async (bookingId) => {
 
   const invoiceData = {
     invoice_number: savedInvoice.invoice_number,
+    order_number: displayId || savedInvoice.order_id,
+    is_service: true,
     customer: {
       name: savedInvoice.customer_name,
       mobile: savedInvoice.mobile,
@@ -518,6 +522,7 @@ const autoGenerateProductInvoice = async (orderId) => {
   try {
     const pdfInvoiceData = {
       invoice_number: invoice.invoice_number,
+      order_number: invoice.order_id,
       customer: {
         name: invoice.customer_name,
         mobile: invoice.mobile,
@@ -598,6 +603,7 @@ const generateOrderInvoicePdf = async (orderId) => {
 
       const invoiceData = {
         invoice_number: invoice.invoice_number,
+        order_number: order.order_number || invoice.order_id || orderIdStr,
         customer: {
           name: invoice.customer_name || order.customer_name || (order.customer ? order.customer.full_name : 'Customer'),
           mobile: invoice.mobile || order.customer_contact || (order.customer ? order.customer.mobile : 'N/A'),
@@ -649,6 +655,7 @@ const generateOrderInvoicePdf = async (orderId) => {
 
   const invoiceData = {
     invoice_number: invoice.invoice_number,
+    order_number: invoice.order_id || orderIdStr,
     customer: {
       name: invoice.customer_name,
       mobile: invoice.mobile,
@@ -665,6 +672,18 @@ const generateOrderInvoicePdf = async (orderId) => {
   return { pdfBuffer, invoice };
 };
 
+const getVendorInvoices = async (vendor_id) => {
+  const invoices = await Invoice.findAll({
+    where: { vendor_id, type: 'VENDOR' },
+    include: [
+      { model: InvoiceItem, as: 'items' },
+      { model: Vendor, as: 'vendor', attributes: ['id', 'business_name', 'full_name', 'gst_number', 'mobile', 'email', 'address'] }
+    ],
+    order: [['createdAt', 'DESC']]
+  });
+  return invoices;
+};
+
 module.exports = {
   deleteAdminInvoice,
   createVendorInvoice,
@@ -672,6 +691,7 @@ module.exports = {
   generateServiceInvoicePdf,
   createServiceInvoice,
   getPendingServiceBookings,
+  getVendorInvoices,
   autoGenerateProductInvoice,
   generateOrderInvoicePdf
 };

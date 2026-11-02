@@ -59,6 +59,12 @@ const downloadOrderInvoice = asyncHandler(async (req, res) => {
   res.send(pdfBuffer);
 });
 
+const getVendorInvoices = asyncHandler(async (req, res) => {
+  const vendor_id = req.user.id;
+  const invoices = await invoiceService.getVendorInvoices(vendor_id);
+  res.status(200).json({ success: true, data: invoices });
+});
+
 module.exports = {
   createVendorInvoice,
   getAdminInvoices,
@@ -66,5 +72,6 @@ module.exports = {
   downloadServiceInvoice,
   downloadOrderInvoice,
   createServiceInvoice,
-  getPendingServiceBookings
+  getPendingServiceBookings,
+  getVendorInvoices
 };
