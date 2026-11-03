@@ -261,6 +261,7 @@ const createOrder = async (orderData, user) => {
 
       const itemBase = parseFloat((sellingPriceExclTax * item.qty).toFixed(2));
       const itemTax = parseFloat((itemTotal - itemBase).toFixed(2));
+      const itemVendorPayout = parseFloat((vendorDiscountedPrice * item.qty).toFixed(2));
 
       total_customer_amount += itemTotal;
       total_subtotal_amount += itemBase;
@@ -275,6 +276,7 @@ const createOrder = async (orderData, user) => {
         tax_amount: itemTax,
         admin_commission: product.admin_commission,
         subtotal: itemBase,
+        vendor_payout: itemVendorPayout,
         status: 'NEW'
       });
     }

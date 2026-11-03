@@ -15,7 +15,8 @@ const createVendorInvoice = async (vendor_id, orderId, items) => {
   }
 
   const orderItems = await OrderItem.findAll({
-    where: { order_id: order.id, vendor_id }
+    where: { order_id: order.id, vendor_id },
+    include: [{ model: Product, as: 'product' }]
   });
 
   if (!orderItems || orderItems.length === 0) {
@@ -23,7 +24,8 @@ const createVendorInvoice = async (vendor_id, orderId, items) => {
   }
 
   const invoice_number = 'INV' + Date.now() + Math.floor(Math.random() * 1000);
-  let total_amount = 0;
+  let total_payout_taxable = 0;
+  let total_payout_tax = 0;
   const invoiceItemsData = [];
 
   for (const orderItem of orderItems) {
@@ -32,13 +34,35 @@ const createVendorInvoice = async (vendor_id, orderId, items) => {
       throw new AppError(`Missing details for item: ${orderItem.product_id}`, 400);
     }
 
-    total_amount += parseFloat(orderItem.subtotal);
-    
+    const qty = orderItem.qty || 1;
+    const slab = orderItem.tax_slab != null ? Number(orderItem.tax_slab) : 18;
+
+    let unitPayout = 0;
+    if (orderItem.vendor_payout != null && qty > 0) {
+      unitPayout = parseFloat((parseFloat(orderItem.vendor_payout) / qty).toFixed(2));
+    } else if (orderItem.product && orderItem.product.base_price != null) {
+      const base = parseFloat(orderItem.product.base_price) || 0;
+      const disc = parseFloat(orderItem.product.discount) || 0;
+      unitPayout = parseFloat((base * (1 - disc / 100)).toFixed(2));
+    } else {
+      const sub = parseFloat(orderItem.subtotal || 0);
+      const comm = parseFloat(orderItem.admin_commission || 0);
+      const net = sub - (sub * (comm / 100));
+      unitPayout = parseFloat((net / qty).toFixed(2));
+    }
+
+    const itemPayoutAmount = parseFloat((unitPayout * qty).toFixed(2));
+    const itemPayoutTax = parseFloat((itemPayoutAmount * (slab / 100)).toFixed(2));
+    const unitPayoutInclTax = parseFloat((unitPayout * (1 + slab / 100)).toFixed(2));
+
+    total_payout_taxable += itemPayoutAmount;
+    total_payout_tax += itemPayoutTax;
+
     invoiceItemsData.push({
-      description: payloadItem.productName || 'Product',
-      qty: orderItem.qty,
-      rate: orderItem.price,
-      amount: orderItem.subtotal,
+      description: payloadItem.productName || (orderItem.product ? orderItem.product.name : 'Product'),
+      qty,
+      rate: unitPayoutInclTax,
+      amount: itemPayoutAmount,
       warranty: payloadItem.warranty || '',
       model_number: payloadItem.modelNumber || '',
       hsn_code: payloadItem.hsnCode || '',
@@ -49,12 +73,11 @@ const createVendorInvoice = async (vendor_id, orderId, items) => {
     await orderItem.save();
   }
 
-  const tax_amount = parseFloat((total_amount * 0.18).toFixed(2));
-  const grand_total = total_amount + tax_amount;
+  const grand_total = parseFloat((total_payout_taxable + total_payout_tax).toFixed(2));
 
   const invoice = await Invoice.create({
     invoice_number,
-    order_id: orderId,
+    order_id: order.order_number || orderId,
     vendor_id,
     customer_name: order.customer_name || (order.customer ? order.customer.full_name : 'N/A'),
     mobile: order.customer_contact || (order.customer ? order.customer.mobile : 'N/A'),

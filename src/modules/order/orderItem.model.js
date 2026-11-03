@@ -54,6 +54,11 @@ const OrderItem = sequelize.define('OrderItem', {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
   },
+  vendor_payout: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: 'Snapshot of total vendor payout amount (excluding tax) for this line item'
+  },
   tax_slab: {
     type: DataTypes.INTEGER,
     allowNull: false,
