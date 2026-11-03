@@ -5,9 +5,21 @@ const AppError = require('../../utils/AppError');
 
 const formatSingleProduct = (p) => {
   const product = p.toJSON ? p.toJSON() : p;
-  const base = parseFloat(product.base_price) || 0;
-  const disc = parseFloat(product.discount) || 0;
-  const finalPrice = base - (base * (disc / 100));
+  const vendorPrice = parseFloat(product.base_price) || 0;
+  const discPct = parseFloat(product.discount) || 0;
+  const commPct = parseFloat(product.admin_commission) || 0;
+  const taxSlab = product.tax_slab != null ? parseFloat(product.tax_slab) : 18;
+
+  const adminCommission = vendorPrice * (commPct / 100);
+  const vendorDiscountedPrice = vendorPrice * (1 - (discPct / 100));
+  const sellingPriceExclTax = vendorDiscountedPrice + adminCommission;
+  const originalPriceExclTax = vendorPrice + adminCommission;
+
+  const taxAmount = sellingPriceExclTax * (taxSlab / 100);
+  const originalTaxAmount = originalPriceExclTax * (taxSlab / 100);
+
+  const finalSellingPrice = parseFloat((sellingPriceExclTax + taxAmount).toFixed(2));
+  const originalPrice = parseFloat((originalPriceExclTax + originalTaxAmount).toFixed(2));
 
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
   const image = product.banner
@@ -18,8 +30,12 @@ const formatSingleProduct = (p) => {
 
   return {
     ...product,
-    originalPrice: base,
-    price: finalPrice,
+    selling_price_excl_tax: parseFloat(sellingPriceExclTax.toFixed(2)),
+    tax_amount: parseFloat(taxAmount.toFixed(2)),
+    tax_slab: taxSlab,
+    originalPrice,
+    price: finalSellingPrice,
+    vendor_payout: parseFloat(vendorDiscountedPrice.toFixed(2)),
     service: product.category || 'General',
     image
   };
@@ -65,9 +81,9 @@ const getProducts = async (filters, pagination, user) => {
   let orderClause = [['auto_id', 'DESC']];
 
   if (sort === 'price-low' || sort === 'price-asc') {
-    orderClause = [[Product.sequelize.literal('(base_price - (base_price * (COALESCE(discount, 0) / 100)))'), 'ASC']];
+    orderClause = [[Product.sequelize.literal('(((base_price * (1 - (COALESCE(discount, 0) / 100))) + (base_price * (COALESCE(admin_commission, 0) / 100))) * (1 + (COALESCE(tax_slab, 18) / 100)))'), 'ASC']];
   } else if (sort === 'price-high' || sort === 'price-desc') {
-    orderClause = [[Product.sequelize.literal('(base_price - (base_price * (COALESCE(discount, 0) / 100)))'), 'DESC']];
+    orderClause = [[Product.sequelize.literal('(((base_price * (1 - (COALESCE(discount, 0) / 100))) + (base_price * (COALESCE(admin_commission, 0) / 100))) * (1 + (COALESCE(tax_slab, 18) / 100)))'), 'DESC']];
   } else if (sort === 'discount') {
     orderClause = [['discount', 'DESC']];
   } else if (sort === 'name' || sort === 'name-asc') {
@@ -131,7 +147,7 @@ const getProductById = async (id) => {
 };
 
 const createProduct = async (productData, user, file) => {
-  const { name, category, discount, stock, description, admin_commission } = productData;
+  const { name, category, discount, stock, description, admin_commission, tax_slab } = productData;
   const base_price = productData.base_price !== undefined ? productData.base_price : productData.price;
   
   let banner = productData.banner || '';
@@ -157,6 +173,7 @@ const createProduct = async (productData, user, file) => {
     category,
     base_price,
     discount: discount || 0,
+    tax_slab: tax_slab !== undefined ? Number(tax_slab) : 18,
     admin_commission: final_admin_commission,
     stock: stock || 0,
     banner,

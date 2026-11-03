@@ -15,6 +15,10 @@ const createProductSchema = z.object({
     (val) => (val === undefined || val === null || val === '' ? 0 : Number(val)),
     z.number().min(0, 'Discount cannot be negative').max(100, 'Discount cannot exceed 100')
   ).optional().default(0),
+  tax_slab: z.preprocess(
+    (val) => (val === undefined || val === null || val === '' ? 18 : Number(val)),
+    z.number().refine(val => [0, 5, 12, 18, 28].includes(val), 'Invalid GST tax slab (must be 0, 5, 12, 18, or 28)')
+  ).optional().default(18),
   admin_commission: z.preprocess(
     (val) => (val === undefined || val === null || val === '' ? 0 : Number(val)),
     z.number().min(0, 'Admin commission cannot be negative').max(100, 'Admin commission cannot exceed 100')
@@ -45,6 +49,10 @@ const updateProductSchema = z.object({
   discount: z.preprocess(
     (val) => (val === undefined || val === null || val === '' ? undefined : Number(val)),
     z.number().min(0).max(100)
+  ).optional(),
+  tax_slab: z.preprocess(
+    (val) => (val === undefined || val === null || val === '' ? undefined : Number(val)),
+    z.number().refine(val => [0, 5, 12, 18, 28].includes(val), 'Invalid GST tax slab (must be 0, 5, 12, 18, or 28)')
   ).optional(),
   admin_commission: z.preprocess(
     (val) => (val === undefined || val === null || val === '' ? undefined : Number(val)),

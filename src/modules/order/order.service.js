@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 const { Order, OrderItem, Product, Customer, Vendor, Cart, CartItem } = require('../../models');
 const { sequelize } = require('../../config/database');
 const AppError = require('../../utils/AppError');
+const { getGstStateCode } = require('../../utils/gstStateCodes');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
@@ -207,13 +208,14 @@ const finalizePaidOrder = async (order, { razorpay_order_id, razorpay_payment_id
 };
 
 const createOrder = async (orderData, user) => {
-  const { items, customer_name, customer_contact, customer_address, company_name, gst_number } = orderData;
+  const { items, customer_name, customer_contact, customer_address, company_name, gst_number, gst_state_code } = orderData;
   let customer_id = null;
+  let customerRecord = null;
 
   if (user && user.role === 'customer') {
     customer_id = user.id;
-    const customer = await Customer.findByPk(customer_id);
-    if (!customer) {
+    customerRecord = await Customer.findByPk(customer_id);
+    if (!customerRecord) {
       throw new AppError('Customer account not found or session has expired. Please log out and log in again.', 401);
     }
   }
@@ -222,7 +224,9 @@ const createOrder = async (orderData, user) => {
     throw new AppError('No items in order', 400);
   }
 
-  let total_amount = 0;
+  let total_customer_amount = 0;
+  let total_subtotal_amount = 0;
+  let total_tax_amount = 0;
   const orderItemsData = [];
 
   const now = new Date();
@@ -242,27 +246,53 @@ const createOrder = async (orderData, user) => {
 
       }
 
-      const price = parseFloat(product.base_price);
-      const discountAmount = price * ((parseFloat(product.discount) || 0) / 100);
-      const finalPrice = price - discountAmount;
-      const subtotal = finalPrice * item.qty;
+      const vendorPrice = parseFloat(product.base_price) || 0;
+      const discPct = parseFloat(product.discount) || 0;
+      const commPct = parseFloat(product.admin_commission) || 0;
+      const slab = product.tax_slab != null ? Number(product.tax_slab) : 18;
 
-      total_amount += subtotal;
+      const adminCommission = vendorPrice * (commPct / 100);
+      const vendorDiscountedPrice = vendorPrice * (1 - (discPct / 100));
+      const sellingPriceExclTax = vendorDiscountedPrice + adminCommission;
+
+      const unitTax = sellingPriceExclTax * (slab / 100);
+      const finalPrice = parseFloat((sellingPriceExclTax + unitTax).toFixed(2));
+      const itemTotal = parseFloat((finalPrice * item.qty).toFixed(2));
+
+      const itemBase = parseFloat((sellingPriceExclTax * item.qty).toFixed(2));
+      const itemTax = parseFloat((itemTotal - itemBase).toFixed(2));
+
+      total_customer_amount += itemTotal;
+      total_subtotal_amount += itemBase;
+      total_tax_amount += itemTax;
 
       orderItemsData.push({
         product_id: product.id,
         vendor_id: product.vendor_id,
         qty: item.qty,
         price: finalPrice,
+        tax_slab: slab,
+        tax_amount: itemTax,
         admin_commission: product.admin_commission,
-        subtotal,
+        subtotal: itemBase,
         status: 'NEW'
       });
     }
 
-    const subtotal_amount = total_amount;
-    const tax_amount = parseFloat((subtotal_amount * 0.18).toFixed(2));
-    const final_total = subtotal_amount + tax_amount;
+    const subtotal_amount = parseFloat(total_subtotal_amount.toFixed(2));
+    const tax_amount = parseFloat(total_tax_amount.toFixed(2));
+    const final_total = parseFloat(total_customer_amount.toFixed(2));
+
+    // Determine 2-digit GST state code
+    let determinedStateCode = '37'; // default to AP
+    if (gst_number && String(gst_number).trim()) {
+      determinedStateCode = gst_state_code || getGstStateCode(gst_number) || '37';
+    } else if (customerRecord && customerRecord.state_name) {
+      // Non-GST retail customer: strictly determined by customer registration state
+      determinedStateCode = getGstStateCode(customerRecord.state_name) || '37';
+    } else if (gst_state_code) {
+      determinedStateCode = gst_state_code;
+    }
 
     order = await Order.create({
       order_number,
@@ -272,6 +302,7 @@ const createOrder = async (orderData, user) => {
       customer_address,
       company_name,
       gst_number,
+      gst_state_code: determinedStateCode,
       subtotal_amount,
       tax_amount,
       total_amount: final_total,

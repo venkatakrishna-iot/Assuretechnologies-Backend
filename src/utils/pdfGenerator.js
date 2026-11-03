@@ -1,4 +1,5 @@
 const PDFDocument = require('pdfkit');
+const { isSameStateAsCompany, getGstStateCode } = require('./gstStateCodes');
 
 function buildInvoicePdf(invoiceData, dataCallback, endCallback) {
   const doc = new PDFDocument({ margin: 50 });
@@ -148,6 +149,20 @@ function generateCustomerInformation(doc, invoiceData) {
     currentY += doc.heightOfString(customer.mobile, { width: billToWidth }) + 4;
   }
 
+  const customerGstin = invoiceData.gst_number || customer.gst_number || customer.gstin;
+  if (customerGstin) {
+    const gstinText = `GSTIN: ${customerGstin}`;
+    doc.text(gstinText, billToX, currentY, { width: billToWidth });
+    currentY += doc.heightOfString(gstinText, { width: billToWidth }) + 4;
+  }
+
+  const customerStateCode = invoiceData.gst_state_code || customer.gst_state_code || getGstStateCode(customer.address || customer.state);
+  if (customerStateCode) {
+    const stateCodeText = `State Code: ${customerStateCode}`;
+    doc.text(stateCodeText, billToX, currentY, { width: billToWidth });
+    currentY += doc.heightOfString(stateCodeText, { width: billToWidth }) + 4;
+  }
+
   const hrY = Math.max(260, Math.max(currentY, infoY + 25) + 10);
   generateHr(doc, hrY);
 
@@ -162,11 +177,11 @@ function generateInvoiceTable(doc, invoiceData, startTop = 330) {
   generateTableRow(
     doc,
     invoiceTableTop,
-    'Item',
     'Description',
-    'Unit Cost',
-    'Quantity',
-    'Line Total'
+    'Qty',
+    'Rate (Incl. Tax)',
+    'Rate (Excl. Tax)',
+    'Amount'
   );
   generateHr(doc, invoiceTableTop + 20);
   doc.font('Helvetica');
@@ -176,21 +191,32 @@ function generateInvoiceTable(doc, invoiceData, startTop = 330) {
   const taxItem = allItems.find(item => item.item_type === 'Tax');
   const items = allItems.filter(item => item.item_type !== 'Tax');
 
+  const gstPercent = invoiceData.gst_percent !== undefined
+    ? parseFloat(invoiceData.gst_percent)
+    : 18;
+
   let position = invoiceTableTop;
   for (i = 0; i < items.length; i++) {
     const item = items[i];
-    position = invoiceTableTop + 30 + (i * 30);
+    position = invoiceTableTop + 30 + (i * 26);
+    const qty = item.qty != null ? item.qty : 1;
+    const rateExcl = item.price != null ? item.price : 0;
+    const rateIncl = item.rate_incl_tax != null 
+      ? item.rate_incl_tax 
+      : (rateExcl * (1 + (gstPercent / 100)));
+    const lineTotal = rateExcl * qty;
+
     generateTableRow(
       doc,
       position,
-      item.item_type || 'Service',
-      item.description,
-      formatCurrency(item.price),
-      String(item.qty != null ? item.qty : ''),
-      formatCurrency(item.price * (item.qty || 1))
+      item.description || item.item_type || 'Item',
+      String(qty),
+      formatCurrency(rateIncl),
+      formatCurrency(rateExcl),
+      formatCurrency(lineTotal)
     );
 
-    generateHr(doc, position + 20);
+    generateHr(doc, position + 18);
   }
 
   const subtotal = invoiceData.subtotal !== undefined
@@ -205,51 +231,58 @@ function generateInvoiceTable(doc, invoiceData, startTop = 330) {
     ? parseFloat(invoiceData.total_amount)
     : (subtotal + taxAmount);
 
-  const gstPercent = invoiceData.gst_percent !== undefined
-    ? parseFloat(invoiceData.gst_percent)
-    : 18;
-
   let summaryY = (items.length > 0 ? position : invoiceTableTop) + 35;
 
   // 1. Subtotal (Taxable Amount)
   doc.font('Helvetica-Bold');
-  generateTableRow(
+  generateSummaryRow(
     doc,
     summaryY,
-    '',
-    '',
-    'Subtotal',
-    '',
+    'Subtotal (Taxable):',
     formatCurrency(subtotal)
   );
 
-  // 2. GST Breakdown (if applicable, without any quantity)
+  // 2. GST Breakdown (CGST + SGST for Intra-State, IGST for Inter-State)
   if (taxAmount > 0.001) {
-    summaryY += 20;
+    const stateCode = invoiceData.gst_state_code || invoiceData.customer?.gst_state_code || getGstStateCode(invoiceData.customer?.address || invoiceData.customer?.state);
+    const isSameState = isSameStateAsCompany(stateCode);
+
     doc.font('Helvetica');
-    const taxLabel = taxItem?.description || `GST (${gstPercent}%)`;
-    generateTableRow(
-      doc,
-      summaryY,
-      '',
-      '',
-      taxLabel,
-      '', // No quantity for tax!
-      formatCurrency(taxAmount)
-    );
+    if (isSameState) {
+      const halfTax = taxAmount / 2;
+      summaryY += 20;
+      generateSummaryRow(
+        doc,
+        summaryY,
+        `CGST (${(gstPercent / 2).toFixed(1)}%):`,
+        formatCurrency(halfTax)
+      );
+      summaryY += 20;
+      generateSummaryRow(
+        doc,
+        summaryY,
+        `SGST (${(gstPercent / 2).toFixed(1)}%):`,
+        formatCurrency(halfTax)
+      );
+    } else {
+      summaryY += 20;
+      generateSummaryRow(
+        doc,
+        summaryY,
+        `IGST (${gstPercent}%):`,
+        formatCurrency(taxAmount)
+      );
+    }
   }
 
   // 3. Grand Total
   summaryY += 25;
   generateHr(doc, summaryY - 5);
   doc.font('Helvetica-Bold');
-  generateTableRow(
+  generateSummaryRow(
     doc,
     summaryY,
-    '',
-    '',
-    'Total',
-    '',
+    'Total Amount:',
     formatCurrency(totalAmount)
   );
 }
@@ -266,14 +299,21 @@ function generateFooter(doc) {
     );
 }
 
-function generateTableRow(doc, y, item, description, unitCost, quantity, lineTotal) {
+function generateTableRow(doc, y, description, quantity, rateInclTax, rateExclTax, lineTotal) {
   doc
-    .fontSize(10)
-    .text(item, 50, y, { width: 90 })
-    .text(description, 150, y, { width: 190 })
-    .text(unitCost, 280, y, { width: 90, align: 'right' })
-    .text(quantity, 370, y, { width: 90, align: 'right' })
-    .text(lineTotal, 0, y, { align: 'right' });
+    .fontSize(9)
+    .text(description, 50, y, { width: 175 })
+    .text(quantity, 230, y, { width: 35, align: 'center' })
+    .text(rateInclTax, 270, y, { width: 85, align: 'right' })
+    .text(rateExclTax, 365, y, { width: 85, align: 'right' })
+    .text(lineTotal, 460, y, { width: 90, align: 'right' });
+}
+
+function generateSummaryRow(doc, y, label, value) {
+  doc
+    .fontSize(9)
+    .text(label, 270, y, { width: 180, align: 'right' })
+    .text(value, 460, y, { width: 90, align: 'right' });
 }
 
 function generateHr(doc, y) {

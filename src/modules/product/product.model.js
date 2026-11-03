@@ -46,6 +46,12 @@ const Product = sequelize.define('Product', {
     defaultValue: 0,
     comment: 'Discount percentage (0 to 100)'
   },
+  tax_slab: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 18,
+    comment: 'GST tax slab percentage (0, 5, 12, 18, 28)'
+  },
   admin_commission: {
     type: DataTypes.DECIMAL(5, 2),
     allowNull: true,

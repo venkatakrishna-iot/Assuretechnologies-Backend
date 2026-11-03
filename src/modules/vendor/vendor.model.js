@@ -48,6 +48,11 @@ const Vendor = sequelize.define('Vendor', {
     type: DataTypes.STRING(15),
     allowNull: false,
   },
+  gst_state_code: {
+    type: DataTypes.STRING(2),
+    allowNull: true,
+    defaultValue: '37',
+  },
   pincode: {
     type: DataTypes.STRING(10),
     allowNull: true,

@@ -165,7 +165,7 @@ const getTechnicians = async (page = 1, limit = 10, search = '', filters = {}) =
 };
 
 const createVendor = async (data, files) => {
-  const { email, mobile, password, full_name, business_name, address, gst_number, pincode, business_description, bank_account_details } = data;
+  const { email, mobile, password, full_name, business_name, address, gst_number, gst_state_code, pincode, business_description, bank_account_details } = data;
 
   const existingVendor = await Vendor.findOne({ where: { email } });
   if (existingVendor) throw new AppError('Email already registered', 400);
@@ -179,8 +179,10 @@ const createVendor = async (data, files) => {
   const pan_proof = files && files.pan_proof ? files.pan_proof[0].path : null;
   const shop_photo = files && files.shop_photo ? files.shop_photo[0].path : null;
 
+  const stateCode = gst_state_code || (gst_number ? String(gst_number).trim().slice(0, 2) : '37');
+
   const vendor = await Vendor.create({
-    email, mobile, password_hash, full_name, business_name, address, gst_number,
+    email, mobile, password_hash, full_name, business_name, address, gst_number, gst_state_code: stateCode,
     pincode, business_description, bank_account_details,
     aadhar_proof, pan_proof, shop_photo,
     is_active: true

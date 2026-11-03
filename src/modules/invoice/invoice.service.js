@@ -1,6 +1,7 @@
 const { Invoice, InvoiceItem, Order, OrderItem, Vendor, Product, Customer, ServiceBooking, Service, ExtraItemsRequest } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { buildInvoicePdf, generateInvoicePdfBuffer } = require('../../utils/pdfGenerator');
+const { getGstStateCode } = require('../../utils/gstStateCodes');
 const { uploadPdfStreamToCloudinary } = require('../../utils/cloudinary');
 
 const createVendorInvoice = async (vendor_id, orderId, items) => {
@@ -81,7 +82,7 @@ const getAdminInvoices = async () => {
   const invoices = await Invoice.findAll({
     include: [
       { model: InvoiceItem, as: 'items' },
-      { model: Vendor, as: 'vendor', attributes: ['id', 'business_name', 'full_name', 'gst_number'] }
+      { model: Vendor, as: 'vendor', attributes: ['id', 'business_name', 'full_name', 'gst_number', 'gst_state_code'] }
     ],
     order: [['createdAt', 'DESC']]
   });
@@ -106,6 +107,7 @@ const getAdminInvoices = async () => {
     if (json.type === 'VENDOR') {
       json.sold_by = json.vendor ? (json.vendor.business_name || json.vendor.full_name) : 'Assure Technologies';
       json.vendor_gstin = json.vendor ? json.vendor.gst_number : '';
+      json.vendor_gst_state_code = json.vendor ? (json.vendor.gst_state_code || (json.vendor.gst_number ? json.vendor.gst_number.slice(0, 2) : '37')) : '37';
       json.product_name = (json.items && json.items.length > 0 && json.items[0].description)
         ? json.items.map(i => i.description).filter(Boolean).join(', ')
         : 'Product';
@@ -512,12 +514,20 @@ const autoGenerateProductInvoice = async (orderId) => {
 
   // Refresh invoice with all items for PDF generation
   const refreshedInvItems = await InvoiceItem.findAll({ where: { invoice_id: invoice.id } });
-  const billableItems = refreshedInvItems.map(item => ({
-    item_type: 'Product',
-    description: item.description,
-    price: parseFloat(item.rate || 0),
-    qty: parseInt(item.qty || 1, 10)
-  }));
+  const billableItems = refreshedInvItems.map(item => {
+    const qty = parseInt(item.qty || 1, 10);
+    const amount = parseFloat(item.amount);
+    const rate = parseFloat(item.rate || 0);
+    const unitPrice = (amount && amount < rate * qty) ? parseFloat((amount / qty).toFixed(2)) : rate;
+    const rateIncl = (rate > unitPrice) ? rate : parseFloat((unitPrice * 1.18).toFixed(2));
+    return {
+      item_type: 'Product',
+      description: item.description,
+      price: unitPrice,
+      rate_incl_tax: rateIncl,
+      qty
+    };
+  });
 
   try {
     const pdfInvoiceData = {
@@ -528,6 +538,8 @@ const autoGenerateProductInvoice = async (orderId) => {
         mobile: invoice.mobile,
         address: invoice.address || 'Address not provided'
       },
+      gst_number: order.gst_number,
+      gst_state_code: order.gst_state_code || (order.gst_number ? order.gst_number.slice(0, 2) : (order.customer ? getGstStateCode(order.customer.state_name) : '37')),
       items: billableItems,
       subtotal: subtotal,
       gst_percent: parseFloat(invoice.gst_percent || 18),
@@ -590,16 +602,30 @@ const generateOrderInvoicePdf = async (orderId) => {
     }
 
     if (invoice) {
-      const billableItems = (invoice.items || []).map(item => ({
-        item_type: 'Product',
-        description: item.description,
-        price: parseFloat(item.rate),
-        qty: item.qty
-      }));
+      const billableItems = (invoice.items || []).map(item => {
+        const qty = parseInt(item.qty || 1, 10);
+        const amount = parseFloat(item.amount);
+        const rate = parseFloat(item.rate || 0);
+        const unitPrice = (amount && amount < rate * qty) ? parseFloat((amount / qty).toFixed(2)) : rate;
+        const rateIncl = (rate > unitPrice) ? rate : parseFloat((unitPrice * 1.18).toFixed(2));
+        return {
+          item_type: 'Product',
+          description: item.description,
+          price: unitPrice,
+          rate_incl_tax: rateIncl,
+          qty
+        };
+      });
 
-      const subtotal = billableItems.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
-      const grandTotal = parseFloat(invoice.grand_total);
-      const gstAmount = grandTotal - subtotal > 0 ? parseFloat((grandTotal - subtotal).toFixed(2)) : 0;
+      const subtotal = (order && order.subtotal_amount) 
+        ? parseFloat(order.subtotal_amount) 
+        : billableItems.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
+      const grandTotal = (order && order.total_amount) 
+        ? parseFloat(order.total_amount) 
+        : parseFloat(invoice.grand_total);
+      const gstAmount = (order && order.tax_amount) 
+        ? parseFloat(order.tax_amount) 
+        : (grandTotal - subtotal > 0 ? parseFloat((grandTotal - subtotal).toFixed(2)) : 0);
 
       const invoiceData = {
         invoice_number: invoice.invoice_number,
@@ -609,6 +635,8 @@ const generateOrderInvoicePdf = async (orderId) => {
           mobile: invoice.mobile || order.customer_contact || (order.customer ? order.customer.mobile : 'N/A'),
           address: invoice.address || order.customer_address || 'Address not provided'
         },
+        gst_number: order.gst_number,
+        gst_state_code: order.gst_state_code || (order.gst_number ? order.gst_number.slice(0, 2) : (order.customer ? getGstStateCode(order.customer.state_name) : '37')),
         items: billableItems,
         subtotal: subtotal,
         gst_percent: parseFloat(invoice.gst_percent || 18),
@@ -677,7 +705,7 @@ const getVendorInvoices = async (vendor_id) => {
     where: { vendor_id, type: 'VENDOR' },
     include: [
       { model: InvoiceItem, as: 'items' },
-      { model: Vendor, as: 'vendor', attributes: ['id', 'business_name', 'full_name', 'gst_number', 'mobile', 'email', 'address'] }
+      { model: Vendor, as: 'vendor', attributes: ['id', 'business_name', 'full_name', 'gst_number', 'gst_state_code', 'mobile', 'email', 'address'] }
     ],
     order: [['createdAt', 'DESC']]
   });

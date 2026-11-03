@@ -33,6 +33,8 @@ const updateProfile = async (vendorId, updateData) => {
     ...(updateData.full_name && { full_name: updateData.full_name }),
     ...(updateData.business_name && { business_name: updateData.business_name }),
     ...(updateData.gst_number && { gst_number: updateData.gst_number }),
+    ...(updateData.gst_state_code && { gst_state_code: updateData.gst_state_code }),
+    ...(updateData.gst_number && !updateData.gst_state_code && { gst_state_code: updateData.gst_number.slice(0, 2) }),
     ...(updateData.address && { address: updateData.address }),
     ...(updateData.pincode !== undefined && { pincode: updateData.pincode || null }),
     ...(updateData.business_description !== undefined && { business_description: updateData.business_description || null })
