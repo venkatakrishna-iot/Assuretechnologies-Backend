@@ -11,9 +11,15 @@ const setServiceOwnerType = (req, res, next) => {
   // If pricing_type_id is provided, it's a Partner template service.
   if (req.body.pricing_type_id !== undefined && req.body.pricing_type_id !== null) {
     req.body.service_owner_type = 'PARTNER';
+    req.body.tax_rate = 0.00; // Partner services strictly have 0% GST to customer
+    if (req.body.admin_commission_rate === undefined || req.body.admin_commission_rate === null || isNaN(req.body.admin_commission_rate)) {
+      req.body.admin_commission_rate = 10.00;
+    }
   } else {
     // Otherwise, it's a standard Admin service.
     req.body.service_owner_type = 'ADMIN';
+    req.body.tax_rate = 18.00; // Admin in-house services have 18% GST
+    req.body.admin_commission_rate = 0.00;
   }
 
   next();

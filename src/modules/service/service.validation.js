@@ -12,7 +12,8 @@ const createServiceSchema = z.object({
   // Partner-specific (Optional initially)
   pricing_type_id: z.string().uuid('Invalid pricing type ID').optional().nullable(),
   price: z.coerce.number().min(0).optional().nullable(), // maps to rate
-  required_partner_type_id: z.string().uuid('Invalid partner type ID').optional().nullable()
+  required_partner_type_id: z.string().uuid('Invalid partner type ID').optional().nullable(),
+  admin_commission_rate: z.coerce.number().min(0).max(100).optional().nullable()
 }).refine(data => {
   const hasAdminFields = data.prebooking_charge !== undefined && data.prebooking_charge !== null;
   const hasPartnerFields = data.pricing_type_id !== undefined || data.required_partner_type_id !== undefined;
@@ -39,6 +40,7 @@ const updateServiceSchema = z.object({
   pricing_type_id: z.string().uuid('Invalid pricing type ID').optional().nullable(),
   rate: z.coerce.number().min(0).optional().nullable(),
   required_partner_type_id: z.string().uuid('Invalid partner type ID').optional().nullable(),
+  admin_commission_rate: z.coerce.number().min(0).max(100).optional().nullable(),
   image: z.string().url('Image must be a valid URL').optional().nullable(),
   prebooking_charge: z.coerce.number().min(0).optional().nullable(),
   custom_fields: z.array(z.any()).optional().nullable()

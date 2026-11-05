@@ -54,6 +54,26 @@ const Service = sequelize.define('Service', {
       min: 0
     }
   },
+  tax_rate: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 0.00,
+    comment: 'GST rate for the service (0% for Partner, 18% for Admin)',
+    validate: {
+      min: 0,
+      max: 100
+    }
+  },
+  admin_commission_rate: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 10.00,
+    comment: 'Admin commission percentage for Partner services',
+    validate: {
+      min: 0,
+      max: 100
+    }
+  },
   service_owner_type: {
     type: DataTypes.ENUM(...OWNER_TYPES),
     allowNull: false,
