@@ -171,8 +171,8 @@ const createServiceInvoice = async (invoiceData) => {
     address: address || '',
     additional_charges_desc: additionalChargesDesc || '',
     additional_charges: additionalCharges || 0,
-    gst_percent: gstPercent || 18,
-    grand_total: grandTotal,
+    gst_percent: (booking?.Service?.service_owner_type === 'PARTNER') ? 0 : (gstPercent !== undefined ? gstPercent : (booking?.Service?.tax_rate ? parseFloat(booking.Service.tax_rate) : 18)),
+    grand_total: (booking?.Service?.service_owner_type === 'PARTNER') ? (parseFloat(booking.Order?.subtotal_amount) || grandTotal) : grandTotal,
     status: balance > 0 ? 'Pending' : 'Paid',
     type: 'SERVICE'
   });
@@ -218,8 +218,9 @@ const createServiceInvoice = async (invoiceData) => {
       });
     }
 
+    const isPartner = booking?.Service?.service_owner_type === 'PARTNER';
     const subtotal = billableItems.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
-    const gstAmount = parseFloat(invoice.grand_total) - subtotal;
+    const gstAmount = isPartner ? 0 : Math.max(0, parseFloat(invoice.grand_total) - subtotal);
 
     const pdfInvoiceData = {
       invoice_number: invoice.invoice_number,
@@ -230,9 +231,9 @@ const createServiceInvoice = async (invoiceData) => {
       },
       items: billableItems,
       subtotal: subtotal,
-      gst_percent: parseFloat(invoice.gst_percent || 18),
+      gst_percent: isPartner ? 0 : parseFloat(invoice.gst_percent || 18),
       tax_amount: gstAmount > 0.01 ? gstAmount : 0,
-      total_amount: parseFloat(invoice.grand_total)
+      total_amount: isPartner ? subtotal : parseFloat(invoice.grand_total)
     };
 
     const pdfBuffer = await generateInvoicePdfBuffer(pdfInvoiceData);
@@ -393,8 +394,9 @@ const generateServiceInvoicePdf = async (bookingId) => {
     });
   }
 
+  const isPartner = booking?.Service?.service_owner_type === 'PARTNER';
   const subtotal = billableItems.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
-  const gstAmount = parseFloat(savedInvoice.grand_total) - subtotal;
+  const gstAmount = isPartner ? 0 : Math.max(0, parseFloat(savedInvoice.grand_total) - subtotal);
 
   const invoiceData = {
     invoice_number: savedInvoice.invoice_number,
@@ -405,9 +407,9 @@ const generateServiceInvoicePdf = async (bookingId) => {
     },
     items: billableItems,
     subtotal: subtotal,
-    gst_percent: parseFloat(savedInvoice.gst_percent || 18),
+    gst_percent: isPartner ? 0 : parseFloat(savedInvoice.gst_percent || 18),
     tax_amount: gstAmount > 0.01 ? gstAmount : 0,
-    total_amount: parseFloat(savedInvoice.grand_total)
+    total_amount: isPartner ? subtotal : parseFloat(savedInvoice.grand_total)
   };
 
   const pdfBuffer = await generateInvoicePdfBuffer(invoiceData);

@@ -71,16 +71,19 @@ const getPublicServices = async ({ search, category_id, service_owner_type, page
         'image_public_id', 
         'createdAt', 
         'updatedAt',
-        'service_owner_type',
-        'pricing_type_id',
         'required_partner_type_id'
       ] 
-    }, // Hide sensitive/internal data from the mobile app
+    },
     include: [
       {
         model: Category,
         as: 'category',
-        attributes: ['id', 'name'] // Removed 'image' since the Category table doesn't have it
+        attributes: ['id', 'name']
+      },
+      {
+        model: PricingType,
+        as: 'pricing_type',
+        attributes: ['id', 'name', 'label']
       }
     ],
     limit: parseInt(limit, 10),
@@ -91,6 +94,10 @@ const getPublicServices = async ({ search, category_id, service_owner_type, page
   // Clean up the JSON by removing any keys that are strictly `null` (like `price` for Admin services)
   const cleanServices = rows.map(service => {
     const serviceJSON = service.toJSON();
+    if (serviceJSON.pricing_type) {
+      serviceJSON.pricingUnitName = serviceJSON.pricing_type.name;
+      serviceJSON.pricingUnitLabel = serviceJSON.pricing_type.label;
+    }
     Object.keys(serviceJSON).forEach(key => {
       if (serviceJSON[key] === null) {
         delete serviceJSON[key];

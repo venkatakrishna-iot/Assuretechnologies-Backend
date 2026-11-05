@@ -49,7 +49,8 @@ const createBooking = async (bookingData, user) => {
 
   // 2. Calculate Final Price based on quantity * unit charge
   const rate = parseFloat(service.price || service.prebooking_charge || 0);
-  const parsedQty = parseFloat(quantity || 1);
+  const isVisitingFee = !service.price && parseFloat(service.prebooking_charge) > 0;
+  const parsedQty = isVisitingFee ? 1 : parseFloat(quantity || 1);
   const final_price = Math.round(rate * parsedQty * 100) / 100;
 
   const now = new Date();
@@ -59,9 +60,24 @@ const createBooking = async (bookingData, user) => {
 
   const order_number = 'SR' + datePart + timePart + randomPart;
 
+  // SSOT: Tax Rate strictly driven by Service definition (0% for Partner, 18% for Admin)
+  const isPartnerService = service.service_owner_type === 'PARTNER';
+  const effectiveTaxRate = isPartnerService ? 0.00 : parseFloat(service.tax_rate !== undefined ? service.tax_rate : 18.00);
+
   const subtotal_amount = Math.round(final_price * 100) / 100;
-  const tax_amount = Math.round(subtotal_amount * 0.18 * 100) / 100;
+  const tax_amount = Math.round(subtotal_amount * (effectiveTaxRate / 100) * 100) / 100;
   const total_amount = Math.round((subtotal_amount + tax_amount) * 100) / 100;
+
+  // Admin Commission & Partner Settlement Split (for Partner Services)
+  let admin_commission_rate = 0;
+  let admin_commission_amount = 0;
+  let partner_payout_amount = subtotal_amount;
+
+  if (isPartnerService) {
+    admin_commission_rate = parseFloat(service.admin_commission_rate !== undefined ? service.admin_commission_rate : 10.00);
+    admin_commission_amount = Math.round(subtotal_amount * (admin_commission_rate / 100) * 100) / 100;
+    partner_payout_amount = Math.round((subtotal_amount - admin_commission_amount) * 100) / 100;
+  }
 
   // If service is free (total_amount === 0), create booking directly in database
   if (total_amount === 0) {
@@ -93,7 +109,12 @@ const createBooking = async (bookingData, user) => {
       quantity: parsedQty,
       metadata: {
         ...(metadata || {}),
-        scheduled_time_slot: scheduled_time_slot || null
+        scheduled_time_slot: scheduled_time_slot || null,
+        service_owner_type: service.service_owner_type,
+        tax_rate: effectiveTaxRate,
+        admin_commission_rate,
+        admin_commission_amount,
+        partner_payout_amount
       },
       status: 'NEW',
       prebooking_paid: true
@@ -460,11 +481,28 @@ const verifyPayment = async (payloadOrBookingId, paymentDataOrUser, possibleUser
     if (!service) throw new AppError('Service not found', 404);
 
     const rate = parseFloat(service.price || service.prebooking_charge || 0);
-    const parsedQty = parseFloat(quantity || 1);
+    const isVisitingFee = !service.price && parseFloat(service.prebooking_charge) > 0;
+    const parsedQty = isVisitingFee ? 1 : parseFloat(quantity || 1);
     const final_price = Math.round(rate * parsedQty * 100) / 100;
+
+    // SSOT: Tax Rate strictly driven by Service definition (0% for Partner, 18% for Admin)
+    const isPartnerService = service.service_owner_type === 'PARTNER';
+    const effectiveTaxRate = isPartnerService ? 0.00 : parseFloat(service.tax_rate !== undefined ? service.tax_rate : 18.00);
+
     const subtotal_amount = Math.round(final_price * 100) / 100;
-    const tax_amount = Math.round(subtotal_amount * 0.18 * 100) / 100;
+    const tax_amount = Math.round(subtotal_amount * (effectiveTaxRate / 100) * 100) / 100;
     const total_amount = Math.round((subtotal_amount + tax_amount) * 100) / 100;
+
+    // Admin Commission & Partner Settlement Split (for Partner Services)
+    let admin_commission_rate = 0;
+    let admin_commission_amount = 0;
+    let partner_payout_amount = subtotal_amount;
+
+    if (isPartnerService) {
+      admin_commission_rate = parseFloat(service.admin_commission_rate !== undefined ? service.admin_commission_rate : 10.00);
+      admin_commission_amount = Math.round(subtotal_amount * (admin_commission_rate / 100) * 100) / 100;
+      partner_payout_amount = Math.round((subtotal_amount - admin_commission_amount) * 100) / 100;
+    }
 
     const now = new Date();
     const datePart = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
