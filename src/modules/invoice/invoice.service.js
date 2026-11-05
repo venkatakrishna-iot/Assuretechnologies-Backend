@@ -422,8 +422,31 @@ const generateServiceInvoicePdf = async (bookingId) => {
   }
 
   const isPartner = booking?.Service?.service_owner_type === 'PARTNER';
-  const subtotal = billableItems.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
-  const gstAmount = isPartner ? 0 : Math.max(0, parseFloat(savedInvoice.grand_total) - subtotal);
+
+  let finalBillableItems = billableItems;
+  let subtotal = billableItems.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
+  let gstAmount = 0;
+  let totalAmount = parseFloat(savedInvoice.grand_total);
+  const gstPercent = parseFloat(savedInvoice.gst_percent || 18);
+
+  if (isPartner) {
+    // Agricultural Partner Service (SAC 9986 - 0% Exempt for Farmers)
+    // Farmer pays flat price (0% GST) under Notification 12/2017 Central Tax (Rate).
+    // Platform fees and commission GST are internal B2B charges documented in the separate Admin Commission Invoice.
+    finalBillableItems = billableItems.map(item => ({
+      ...item,
+      description: item.description ? `${item.description} (SAC 9986 - Exempt)` : 'Agricultural Service (SAC 9986 - Exempt)',
+      rate_incl_tax: item.price,
+      rate_excl_tax: item.price,
+      tax_rate: 0
+    }));
+
+    subtotal = finalBillableItems.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
+    gstAmount = 0;
+    totalAmount = subtotal;
+  } else {
+    gstAmount = Math.max(0, totalAmount - subtotal);
+  }
 
   const invoiceData = {
     invoice_number: savedInvoice.invoice_number,
@@ -434,11 +457,11 @@ const generateServiceInvoicePdf = async (bookingId) => {
       mobile: savedInvoice.mobile,
       address: savedInvoice.address || 'Address not provided'
     },
-    items: billableItems,
+    items: finalBillableItems,
     subtotal: subtotal,
-    gst_percent: isPartner ? 0 : parseFloat(savedInvoice.gst_percent || 18),
+    gst_percent: isPartner ? 0 : gstPercent,
     tax_amount: gstAmount > 0.01 ? gstAmount : 0,
-    total_amount: isPartner ? subtotal : parseFloat(savedInvoice.grand_total)
+    total_amount: totalAmount
   };
 
   const pdfBuffer = await generateInvoicePdfBuffer(invoiceData);
@@ -737,11 +760,104 @@ const getVendorInvoices = async (vendor_id) => {
   return invoices;
 };
 
+
+const generatePartnerCommissionInvoicePdf = async (bookingId) => {
+  const bookingIdStr = String(bookingId || '').trim();
+  const { Partner } = require('../../models');
+
+  let booking = null;
+  if (bookingIdStr.startsWith('BKG-') || bookingIdStr.startsWith('SR-')) {
+    const rawNumber = bookingIdStr.startsWith('SR-') ? bookingIdStr.replace('SR-', '') : bookingIdStr.replace('BKG-', '');
+    const autoId = parseInt(rawNumber, 10) - 1000;
+    if (!isNaN(autoId)) {
+      booking = await ServiceBooking.findOne({
+        where: { auto_id: autoId },
+        include: [
+          { model: Service, as: 'Service' },
+          { model: Order, as: 'Order' },
+          { model: Partner, as: 'assigned_partner' }
+        ]
+      });
+    }
+  } else if (!isNaN(Number(bookingIdStr)) && bookingIdStr !== '') {
+    booking = await ServiceBooking.findOne({
+      where: { auto_id: Number(bookingIdStr) },
+      include: [
+        { model: Service, as: 'Service' },
+        { model: Order, as: 'Order' },
+        { model: Partner, as: 'assigned_partner' }
+      ]
+    });
+  }
+
+  if (!booking) {
+    booking = await ServiceBooking.findByPk(bookingIdStr, {
+      include: [
+        { model: Service, as: 'Service' },
+        { model: Order, as: 'Order' },
+        { model: Partner, as: 'assigned_partner' }
+      ]
+    });
+  }
+
+  if (!booking) {
+    throw new AppError('Service booking not found', 404);
+  }
+
+  const displayId = booking.display_id || `SR-${booking.auto_id + 1000}`;
+  const partner = booking.assigned_partner;
+  const isPartner = (booking.Service?.service_owner_type === 'PARTNER') || (booking.metadata?.service_owner_type === 'PARTNER');
+
+  if (!isPartner) {
+    throw new AppError('Commission invoice is only applicable for Partner services', 400);
+  }
+
+  const commRate = parseFloat(booking.metadata?.admin_commission_rate ?? booking.Service?.admin_commission_rate ?? 10);
+  const totalBookingAmount = booking.Order?.total_amount ? parseFloat(booking.Order.total_amount) : (parseFloat(booking.Service?.price || 0) * (booking.quantity || 1));
+  const grossComm = booking.metadata?.admin_commission_amount ? parseFloat(booking.metadata.admin_commission_amount) : Math.round(totalBookingAmount * (commRate / 100) * 100) / 100;
+
+  const platformFeeTaxable = booking.metadata?.platform_fee_taxable ? parseFloat(booking.metadata.platform_fee_taxable) : Math.round((grossComm / 1.18) * 100) / 100;
+  const platformFeeGst = booking.metadata?.platform_fee_gst ? parseFloat(booking.metadata.platform_fee_gst) : Math.round((grossComm - platformFeeTaxable) * 100) / 100;
+  const partnerPayout = booking.metadata?.partner_payout_amount ? parseFloat(booking.metadata.partner_payout_amount) : Math.round((totalBookingAmount - grossComm) * 100) / 100;
+
+  const invoiceNumber = `COMM-${displayId.replace(/[^A-Za-z0-9]/g, '')}`;
+
+  const commissionInvoiceData = {
+    invoice_title: 'Commission Tax Invoice (B2B)',
+    invoice_number: invoiceNumber,
+    order_number: displayId,
+    is_service: true,
+    customer: {
+      name: partner ? `${partner.full_name} (Service Partner)` : 'Service Partner',
+      mobile: partner?.mobile || 'N/A',
+      address: partner?.address || 'Partner Service Location'
+    },
+    items: [
+      {
+        item_type: 'Platform Fee',
+        description: `Marketplace Platform Commission (${commRate}% Facilitation Fee on ${displayId}) (SAC 996111)`,
+        qty: 1,
+        price: platformFeeTaxable,
+        rate_incl_tax: grossComm,
+        tax_rate: 18
+      }
+    ],
+    subtotal: platformFeeTaxable,
+    gst_percent: 18,
+    tax_amount: platformFeeGst,
+    total_amount: grossComm
+  };
+
+  const pdfBuffer = await generateInvoicePdfBuffer(commissionInvoiceData);
+  return { pdfBuffer, invoiceNumber, displayId, grossComm, platformFeeTaxable, platformFeeGst, partnerPayout };
+};
+
 module.exports = {
   deleteAdminInvoice,
   createVendorInvoice,
   getAdminInvoices,
   generateServiceInvoicePdf,
+  generatePartnerCommissionInvoicePdf,
   createServiceInvoice,
   getPendingServiceBookings,
   getVendorInvoices,

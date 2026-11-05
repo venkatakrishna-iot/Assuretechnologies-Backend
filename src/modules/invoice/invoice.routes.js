@@ -17,6 +17,7 @@ router.delete('/admin/:id', authMiddleware(['admin']), invoiceController.deleteA
 router.get('/service-bookings/pending', authMiddleware(['admin']), invoiceController.getPendingServiceBookings);
 router.post('/service', authMiddleware(['admin']), invoiceController.createServiceInvoice);
 router.get('/service/:bookingId/download', authMiddleware(['customer', 'admin', 'technician', 'partner']), invoiceController.downloadServiceInvoice);
+router.get('/service/:bookingId/commission-invoice/download', authMiddleware(['admin']), invoiceController.downloadPartnerCommissionInvoice);
 
 // Product Order Invoice routes
 router.get('/orders/:orderId/download', authMiddleware(['customer', 'admin', 'vendor']), invoiceController.downloadOrderInvoice);
