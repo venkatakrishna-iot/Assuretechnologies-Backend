@@ -121,6 +121,7 @@ const getAdminInvoices = async () => {
         });
         if (booking && booking.Service) {
           json.service_name = booking.Service.name;
+          json.is_partner = (booking.Service.service_owner_type === 'PARTNER') || (booking.metadata?.service_owner_type === 'PARTNER');
         }
       } catch (err) {
         console.error('Error resolving service name for invoice:', err);
