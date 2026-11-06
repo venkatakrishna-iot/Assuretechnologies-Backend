@@ -425,11 +425,6 @@ const getAdminBookings = async (status, owner_type, page = 1, limit = 10) => {
         model: Partner,
         as: 'assigned_partner',
         attributes: ['id', 'auto_id', 'display_id', 'full_name', 'mobile', 'email']
-      },
-      {
-        model: JobProgress,
-        as: 'progress_updates',
-        attributes: ['id', 'actor_type', 'partner_id', 'technician_id', 'description', 'photos', 'update_type', 'createdAt']
       }
     ],
     order: [['createdAt', 'DESC']],
@@ -438,6 +433,25 @@ const getAdminBookings = async (status, owner_type, page = 1, limit = 10) => {
     subQuery: false,
     distinct: true
   });
+
+  if (rows && rows.length > 0) {
+    const bookingIds = rows.map(b => b.id);
+    const progressList = await JobProgress.findAll({
+      where: { booking_id: bookingIds },
+      attributes: ['id', 'booking_id', 'actor_type', 'partner_id', 'technician_id', 'description', 'photos', 'update_type', 'createdAt'],
+      order: [['createdAt', 'ASC']]
+    });
+
+    const progressByBooking = {};
+    for (const p of progressList) {
+      if (!progressByBooking[p.booking_id]) progressByBooking[p.booking_id] = [];
+      progressByBooking[p.booking_id].push(p.toJSON ? p.toJSON() : p);
+    }
+
+    for (const b of rows) {
+      b.dataValues.progress_updates = progressByBooking[b.id] || [];
+    }
+  }
 
   return {
     available_statuses: BOOKING_STATUSES,
