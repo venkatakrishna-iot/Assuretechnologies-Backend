@@ -62,6 +62,10 @@ const Quotation = sequelize.define('Quotation', {
   grand_total: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
+  },
+  terms_and_conditions: {
+    type: DataTypes.TEXT,
+    allowNull: true
   }
 }, {
   timestamps: true,

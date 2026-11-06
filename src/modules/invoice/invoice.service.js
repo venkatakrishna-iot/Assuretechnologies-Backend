@@ -139,6 +139,9 @@ const getAdminInvoices = async () => {
       json.sold_by = 'Assure Technologies';
     }
 
+    json.is_manual = Boolean(json.is_manual);
+    json.isManual = Boolean(json.is_manual);
+
     return json;
   }));
 
@@ -152,70 +155,122 @@ const deleteAdminInvoice = async (id) => {
 };
 
 const createServiceInvoice = async (invoiceData) => {
-  const { srNo, customerName, mobile, email, address, items, additionalChargesDesc, additionalCharges, gstPercent, grandTotal, serviceName } = invoiceData;
+  const {
+    srNo,
+    customerName,
+    customer_name,
+    mobile,
+    email,
+    companyName,
+    company_name,
+    gstNumber,
+    gst_number,
+    address,
+    pincode,
+    items,
+    additionalChargesDesc,
+    additional_charges_desc,
+    additionalCharges,
+    additional_charges,
+    gstPercent,
+    gst_percent,
+    grandTotal,
+    grand_total,
+    termsAndConditions,
+    terms_and_conditions,
+    serviceName
+  } = invoiceData;
 
-  const booking = await ServiceBooking.findOne({
-    where: { auto_id: parseInt(srNo.split('-')[1]) - 1000 },
-    include: [
-      { model: Service },
-      { model: Order }
-    ]
-  });
-
-  // Validate base service payload against DB truth
-  if (items && items.length > 0) {
-    if (booking) {
-      const trueQty = booking.quantity ? parseFloat(booking.quantity) : 1;
-      const trueRate = (booking.Order && booking.Order.subtotal_amount && trueQty) ? parseFloat(booking.Order.subtotal_amount) / trueQty : (booking.Service ? parseFloat(booking.Service.prebooking_charge) : 0);
-      
-      const payloadQty = parseFloat(items[0].qty) || 0;
-      const payloadRate = parseFloat(items[0].rate) || 0;
-
-      if (payloadQty !== trueQty || payloadRate !== trueRate) {
-        throw new AppError('Base service quantity and rate cannot be modified.', 400);
-      }
+  let booking = null;
+  if (srNo && typeof srNo === 'string' && srNo.includes('-')) {
+    const rawNumber = srNo.startsWith('SR-') ? srNo.replace('SR-', '') : (srNo.startsWith('BKG-') ? srNo.replace('BKG-', '') : srNo.split('-')[1]);
+    const autoId = parseInt(rawNumber, 10) - 1000;
+    if (!isNaN(autoId)) {
+      booking = await ServiceBooking.findOne({
+        where: { auto_id: autoId },
+        include: [
+          { model: Service },
+          { model: Order }
+        ]
+      });
     }
   }
 
-  const invoice_number = 'INV' + Date.now() + Math.floor(Math.random() * 1000);
+  // Validate base service payload against DB truth if booking exists
+  if (items && items.length > 0 && booking) {
+    const trueQty = booking.quantity ? parseFloat(booking.quantity) : 1;
+    const trueRate = (booking.Order && booking.Order.subtotal_amount && trueQty) ? parseFloat(booking.Order.subtotal_amount) / trueQty : (booking.Service ? parseFloat(booking.Service.prebooking_charge) : 0);
+    
+    const payloadQty = parseFloat(items[0].qty) || 0;
+    const payloadRate = parseFloat(items[0].rate) || 0;
+
+    if (payloadQty !== trueQty || payloadRate !== trueRate) {
+      throw new AppError('Base service quantity and rate cannot be modified.', 400);
+    }
+  }
+
+  const { Op } = require('sequelize');
+  const isManual = Boolean(invoiceData.isManual || invoiceData.is_manual);
+
+  let invoice_number = invoiceData.invoiceNumber || invoiceData.invoice_number;
+  if (!invoice_number) {
+    if (isManual) {
+      const todayStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+      const countToday = await Invoice.count({
+        where: {
+          invoice_number: { [Op.like]: `INV-${todayStr}-%` }
+        }
+      });
+      const seq = String(countToday + 1).padStart(3, '0');
+      invoice_number = `INV-${todayStr}-${seq}`;
+    } else {
+      invoice_number = 'INV' + Date.now() + Math.floor(Math.random() * 1000);
+    }
+  }
 
   // Calculate remaining balance based on what was already paid in the Order
   const orderTotal = booking && booking.Order ? parseFloat(booking.Order.total_amount) : 0;
-  const grandTotalParsed = parseFloat(grandTotal) || 0;
-  // If the new invoice total is greater than what was originally paid, there's a balance.
-  // E.g., Order total = 1180, Invoice grand total = 1180 (no balance)
-  // E.g., Order total = 1180, Invoice grand total = 2360 (balance = 1180)
-  // Allow a small margin of error for floating point
+  const grandTotalParsed = parseFloat(grandTotal || grand_total || 0);
   let balance = grandTotalParsed - orderTotal;
-  if (balance < 1) balance = 0; // if it's pennies, ignore it
+  if (balance < 1) balance = 0;
 
   const invoice = await Invoice.create({
     invoice_number,
-    order_id: srNo, // We map the booking's display_id (e.g. BKG-1025) to order_id
-    customer_name: customerName || 'N/A',
+    order_id: srNo || invoice_number,
+    customer_name: customerName || customer_name || 'N/A',
     mobile: mobile || 'N/A',
     email: email || '',
+    company_name: companyName || company_name || null,
+    gst_number: gstNumber || gst_number || null,
     address: address || '',
-    additional_charges_desc: additionalChargesDesc || '',
-    additional_charges: additionalCharges || 0,
-    gst_percent: (booking?.Service?.service_owner_type === 'PARTNER') ? 0 : (gstPercent !== undefined ? gstPercent : (booking?.Service?.tax_rate ? parseFloat(booking.Service.tax_rate) : 18)),
-    grand_total: (booking?.Service?.service_owner_type === 'PARTNER') ? (parseFloat(booking.Order?.subtotal_amount) || grandTotal) : grandTotal,
+    pincode: pincode || null,
+    additional_charges_desc: additionalChargesDesc || additional_charges_desc || '',
+    additional_charges: additionalCharges !== undefined ? additionalCharges : (additional_charges || 0),
+    gst_percent: (booking?.Service?.service_owner_type === 'PARTNER') ? 0 : (gstPercent !== undefined ? gstPercent : (gst_percent !== undefined ? gst_percent : (booking?.Service?.tax_rate ? parseFloat(booking.Service.tax_rate) : 18))),
+    grand_total: (booking?.Service?.service_owner_type === 'PARTNER') ? (parseFloat(booking.Order?.subtotal_amount) || grandTotalParsed) : grandTotalParsed,
+    terms_and_conditions: termsAndConditions || terms_and_conditions || null,
     status: balance > 0 ? 'Pending' : 'Paid',
-    type: 'SERVICE'
+    type: 'SERVICE',
+    is_manual: isManual
   });
 
   if (items && items.length > 0) {
     for (const item of items) {
+      const desc = item.description || item.service_name || item.name || serviceName || 'Service';
+      const qty = parseInt(item.qty, 10) || 1;
+      const rate = parseFloat(item.rate !== undefined ? item.rate : (item.cost !== undefined ? item.cost : 0)) || 0;
+      const amount = parseFloat(item.amount !== undefined ? item.amount : (item.total !== undefined ? item.total : rate * qty)) || 0;
+
       await InvoiceItem.create({
         invoice_id: invoice.id,
-        description: item.description || serviceName || 'Service',
-        qty: item.qty || 1,
-        rate: item.rate || 0,
-        amount: item.amount || 0,
+        description: desc,
+        qty,
+        rate,
+        amount,
         warranty: item.warranty || '',
-        model_number: item.modelNumber || '',
-        hsn_code: item.hsnCode || '',
-        serial_numbers: Array.isArray(item.serialNumbers) ? JSON.stringify(item.serialNumbers) : (item.serialNumbers || '[]')
+        model_number: item.modelNumber || item.model_number || '',
+        hsn_code: item.hsnCode || item.hsn_code || '',
+        serial_numbers: Array.isArray(item.serialNumbers) ? JSON.stringify(item.serialNumbers) : (Array.isArray(item.serial_numbers) ? JSON.stringify(item.serial_numbers) : (item.serialNumbers || item.serial_numbers || '[]'))
       });
     }
   }

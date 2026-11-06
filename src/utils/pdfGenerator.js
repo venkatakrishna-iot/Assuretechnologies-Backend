@@ -10,7 +10,10 @@ function buildInvoicePdf(invoiceData, dataCallback, endCallback) {
   generateHeader(doc);
   const customerBottomY = generateCustomerInformation(doc, invoiceData);
   const tableTop = Math.max(310, (customerBottomY || 260) + 25);
-  generateInvoiceTable(doc, invoiceData, tableTop);
+  const tableBottomY = generateInvoiceTable(doc, invoiceData, tableTop);
+  if (!invoiceData.is_service) {
+    generateWarrantyConditions(doc, tableBottomY);
+  }
   generateFooter(doc);
 
   doc.end();
@@ -286,16 +289,128 @@ function generateInvoiceTable(doc, invoiceData, startTop = 330) {
     'Total Amount:',
     formatCurrency(totalAmount)
   );
+
+  return summaryY + 25;
+}
+
+function generateWarrantyConditions(doc, startY) {
+  let y = startY || 450;
+  if (y > 480) {
+    doc.addPage();
+    y = 50;
+  }
+
+  doc
+    .font('Helvetica-Bold')
+    .fontSize(10)
+    .fillColor('#0f172a')
+    .text('Component Warranty Conditions', 50, y);
+
+  y += 15;
+  doc
+    .strokeColor('#cbd5e1')
+    .lineWidth(0.8)
+    .moveTo(50, y)
+    .lineTo(550, y)
+    .stroke();
+
+  y += 10;
+
+  const bulletItems = [
+    {
+      title: 'Manufacturer Warranty: ',
+      text: 'Hardware components (cameras, NVRs/DVRs, hard drives) carry a 1-to-3-year manufacturer warranty from the date of purchase. The installer acts as the facilitator for these claims.'
+    },
+    {
+      title: 'Workmanship/Labor Warranty: ',
+      text: 'Installation labor is typically covered for 90 days to 1 year. This covers faulty wiring, loose mounts, or incorrect configuration by the technicians.'
+    },
+    {
+      title: 'Warranty Exclusions: ',
+      text: 'The warranty is strictly void under the following conditions:',
+      subBullets: [
+        'Damage caused by lightning strikes, power surges, floods, or acts of God.',
+        'Vandalism, physical tampering, or unauthorized relocation of cameras.',
+        'Modifications to software settings, network routing, or firmware updates done by the client or a third party.'
+      ]
+    },
+    {
+      title: 'Consumables Exclusion: ',
+      text: 'Cables, connectors, power adapters, and batteries are generally excluded from long-term warranties or carry a heavily reduced coverage period (e.g., 90 days).'
+    },
+    {
+      title: 'Advance Replacement Policy: ',
+      text: 'Defective components must be tested and verified before a replacement is issued. Loaner cameras during the manufacturer repair window are not included unless a separate Annual Maintenance Contract (AMC) is signed.'
+    }
+  ];
+
+  for (const item of bulletItems) {
+    if (y > 700) {
+      doc.addPage();
+      y = 50;
+    }
+
+    doc
+      .fontSize(8.5)
+      .fillColor('#334155')
+      .font('Helvetica')
+      .text('•', 50, y, { width: 10 });
+
+    doc
+      .fontSize(8.5)
+      .fillColor('#0f172a')
+      .font('Helvetica-Bold')
+      .text(item.title, 64, y, { continued: true, width: 486 })
+      .fillColor('#334155')
+      .font('Helvetica')
+      .text(item.text, { width: 486 });
+
+    y = doc.y + 6;
+
+    if (item.subBullets && item.subBullets.length > 0) {
+      for (const sub of item.subBullets) {
+        if (y > 700) {
+          doc.addPage();
+          y = 50;
+        }
+        doc
+          .circle(76, y + 4.5, 1.5)
+          .strokeColor('#64748b')
+          .lineWidth(0.8)
+          .stroke();
+
+        doc
+          .fontSize(8.5)
+          .fillColor('#475569')
+          .font('Helvetica')
+          .text(sub, 86, y, { width: 464 });
+
+        y = doc.y + 4;
+      }
+      y += 2;
+    }
+  }
+
+  return y;
 }
 
 function generateFooter(doc) {
+  const pageBottom = doc.page.height - 50;
+  let footerY = pageBottom;
+
+  if (doc.y + 20 > pageBottom) {
+    doc.addPage();
+    footerY = doc.page.height - 50;
+  }
+
   doc
     .fontSize(10)
+    .font('Helvetica')
     .fillColor('#666666')
     .text(
       'Thank you for your business.',
       50,
-      700,
+      footerY,
       { align: 'center', width: 500 }
     );
 }

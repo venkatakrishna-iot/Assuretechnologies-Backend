@@ -63,6 +63,26 @@ const Invoice = sequelize.define('Invoice', {
   invoice_pdf_url: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  company_name: {
+    type: DataTypes.STRING(255),
+    allowNull: true
+  },
+  gst_number: {
+    type: DataTypes.STRING(15),
+    allowNull: true
+  },
+  pincode: {
+    type: DataTypes.STRING(6),
+    allowNull: true
+  },
+  terms_and_conditions: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  is_manual: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   }
 }, {
   timestamps: true,

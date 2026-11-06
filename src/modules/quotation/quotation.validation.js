@@ -21,7 +21,8 @@ const createQuotationSchema = z.object({
   services: z.array(serviceItemSchema).min(1, 'At least one service item is required'),
   additional_charges_desc: z.string().optional().or(z.literal('')).nullable(),
   additional_charges: z.number().optional().default(0),
-  gst_percent: z.number().min(0).max(100).optional().default(18)
+  gst_percent: z.number().min(0).max(100).optional().default(18),
+  terms_and_conditions: z.string().optional().or(z.literal('')).nullable()
 });
 
 module.exports = {
