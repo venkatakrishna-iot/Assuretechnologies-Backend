@@ -66,6 +66,11 @@ const Quotation = sequelize.define('Quotation', {
   terms_and_conditions: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  tax_type: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    defaultValue: 'GST'
   }
 }, {
   timestamps: true,

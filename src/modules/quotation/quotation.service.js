@@ -59,7 +59,8 @@ const createQuotation = async (data) => {
       additional_charges: additionalCharges,
       gst_percent: gstPercent,
       grand_total: grandTotal,
-      terms_and_conditions: data.terms_and_conditions || null
+      terms_and_conditions: data.terms_and_conditions || null,
+      tax_type: data.tax_type || data.taxType || 'GST'
     }, { transaction });
 
     // 4. Create Quotation Items

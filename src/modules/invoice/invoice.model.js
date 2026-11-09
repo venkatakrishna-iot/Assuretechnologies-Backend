@@ -83,6 +83,11 @@ const Invoice = sequelize.define('Invoice', {
   is_manual: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
+  },
+  tax_type: {
+    type: DataTypes.STRING(10),
+    allowNull: true,
+    defaultValue: 'GST'
   }
 }, {
   timestamps: true,

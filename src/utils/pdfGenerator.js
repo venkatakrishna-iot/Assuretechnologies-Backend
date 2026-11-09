@@ -135,7 +135,15 @@ function generateCustomerInformation(doc, invoiceData) {
 
   let currentY = customerInformationTop + 15;
 
-  if (customer.name) {
+  const companyName = invoiceData.company_name || customer.company_name;
+  if (companyName) {
+    doc.font('Helvetica-Bold').text(companyName, billToX, currentY, { width: billToWidth });
+    currentY += doc.heightOfString(companyName, { width: billToWidth }) + 4;
+    if (customer.name) {
+      doc.font('Helvetica').text(`Contact: ${customer.name}`, billToX, currentY, { width: billToWidth });
+      currentY += doc.heightOfString(`Contact: ${customer.name}`, { width: billToWidth }) + 4;
+    }
+  } else if (customer.name) {
     doc.font('Helvetica-Bold').text(customer.name, billToX, currentY, { width: billToWidth });
     currentY += doc.heightOfString(customer.name, { width: billToWidth }) + 4;
   }

@@ -51,9 +51,12 @@ const createVendorInvoice = async (vendor_id, orderId, items) => {
       unitPayout = parseFloat((net / qty).toFixed(2));
     }
 
-    const itemPayoutAmount = parseFloat((unitPayout * qty).toFixed(2));
-    const itemPayoutTax = parseFloat((itemPayoutAmount * (slab / 100)).toFixed(2));
-    const unitPayoutInclTax = parseFloat((unitPayout * (1 + slab / 100)).toFixed(2));
+    // Vendor base price is tax-inclusive. Reverse-calculate taxable amount and tax.
+    const unitPayoutInclTax = unitPayout;
+    const unitPayoutExclTax = parseFloat((unitPayoutInclTax / (1 + (slab / 100))).toFixed(2));
+    const itemPayoutAmount = parseFloat((unitPayoutExclTax * qty).toFixed(2));
+    const itemPayoutTotal = parseFloat((unitPayoutInclTax * qty).toFixed(2));
+    const itemPayoutTax = parseFloat((itemPayoutTotal - itemPayoutAmount).toFixed(2));
 
     total_payout_taxable += itemPayoutAmount;
     total_payout_tax += itemPayoutTax;
@@ -141,6 +144,7 @@ const getAdminInvoices = async () => {
 
     json.is_manual = Boolean(json.is_manual);
     json.isManual = Boolean(json.is_manual);
+    json.tax_type = json.tax_type || (json.gst_number && !json.gst_number.startsWith('37') ? 'IGST' : 'GST');
 
     return json;
   }));
@@ -251,7 +255,8 @@ const createServiceInvoice = async (invoiceData) => {
     terms_and_conditions: termsAndConditions || terms_and_conditions || null,
     status: balance > 0 ? 'Pending' : 'Paid',
     type: 'SERVICE',
-    is_manual: isManual
+    is_manual: isManual,
+    tax_type: invoiceData.tax_type || invoiceData.taxType || 'GST'
   });
 
   if (items && items.length > 0) {
@@ -616,19 +621,18 @@ const autoGenerateProductInvoice = async (orderId) => {
     }
   }
 
-  // Refresh invoice with all items for PDF generation
-  const refreshedInvItems = await InvoiceItem.findAll({ where: { invoice_id: invoice.id } });
-  const billableItems = refreshedInvItems.map(item => {
-    const qty = parseInt(item.qty || 1, 10);
-    const amount = parseFloat(item.amount);
-    const rate = parseFloat(item.rate || 0);
-    const unitPrice = (amount && amount < rate * qty) ? parseFloat((amount / qty).toFixed(2)) : rate;
-    const rateIncl = (rate > unitPrice) ? rate : parseFloat((unitPrice * 1.18).toFixed(2));
+  // Build billable items directly from order items so customer rates and totals match
+  const billableItems = itemsToBill.map(item => {
+    const qty = parseInt(item.qty || item.quantity || 1, 10);
+    const itemSubtotal = parseFloat(item.subtotal || 0);
+    const itemPrice = parseFloat(item.price || 0);
+    const unitPriceExcl = parseFloat((itemSubtotal / qty).toFixed(2));
+    const unitPriceIncl = parseFloat((itemPrice / qty).toFixed(2));
     return {
       item_type: 'Product',
-      description: item.description,
-      price: unitPrice,
-      rate_incl_tax: rateIncl,
+      description: item.product ? item.product.name : (item.Product ? item.Product.name : 'Product'),
+      price: unitPriceExcl,
+      rate_incl_tax: unitPriceIncl,
       qty
     };
   });
@@ -637,8 +641,10 @@ const autoGenerateProductInvoice = async (orderId) => {
     const pdfInvoiceData = {
       invoice_number: invoice.invoice_number,
       order_number: invoice.order_id,
+      company_name: order.company_name,
       customer: {
         name: invoice.customer_name,
+        company_name: order.company_name,
         mobile: invoice.mobile,
         address: invoice.address || 'Address not provided'
       },
@@ -706,17 +712,17 @@ const generateOrderInvoicePdf = async (orderId) => {
     }
 
     if (invoice) {
-      const billableItems = (invoice.items || []).map(item => {
-        const qty = parseInt(item.qty || 1, 10);
-        const amount = parseFloat(item.amount);
-        const rate = parseFloat(item.rate || 0);
-        const unitPrice = (amount && amount < rate * qty) ? parseFloat((amount / qty).toFixed(2)) : rate;
-        const rateIncl = (rate > unitPrice) ? rate : parseFloat((unitPrice * 1.18).toFixed(2));
+      const billableItems = itemsToBill.map(item => {
+        const qty = parseInt(item.qty || item.quantity || 1, 10);
+        const itemSubtotal = parseFloat(item.subtotal || 0);
+        const itemPrice = parseFloat(item.price || 0);
+        const unitPriceExcl = parseFloat((itemSubtotal / qty).toFixed(2));
+        const unitPriceIncl = parseFloat((itemPrice / qty).toFixed(2));
         return {
           item_type: 'Product',
-          description: item.description,
-          price: unitPrice,
-          rate_incl_tax: rateIncl,
+          description: item.product ? item.product.name : (item.Product ? item.Product.name : 'Product'),
+          price: unitPriceExcl,
+          rate_incl_tax: unitPriceIncl,
           qty
         };
       });
@@ -734,8 +740,10 @@ const generateOrderInvoicePdf = async (orderId) => {
       const invoiceData = {
         invoice_number: invoice.invoice_number,
         order_number: order.order_number || invoice.order_id || orderIdStr,
+        company_name: order.company_name || invoice.company_name,
         customer: {
           name: invoice.customer_name || order.customer_name || (order.customer ? order.customer.full_name : 'Customer'),
+          company_name: order.company_name || invoice.company_name,
           mobile: invoice.mobile || order.customer_contact || (order.customer ? order.customer.mobile : 'N/A'),
           address: invoice.address || order.customer_address || 'Address not provided'
         },
