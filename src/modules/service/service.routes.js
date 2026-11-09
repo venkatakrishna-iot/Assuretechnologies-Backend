@@ -24,9 +24,18 @@ const processFormData = (req, res, next) => {
   }
 
   // 2. Convert string numbers back to actual numbers (since multipart makes everything a string)
-  if (req.body.prebooking_charge) req.body.prebooking_charge = parseFloat(req.body.prebooking_charge);
-  if (req.body.price) req.body.price = parseFloat(req.body.price);
-  if (req.body.admin_commission_rate !== undefined) req.body.admin_commission_rate = parseFloat(req.body.admin_commission_rate);
+  if (req.body.prebooking_charge !== undefined && req.body.prebooking_charge !== null && req.body.prebooking_charge !== '') {
+    req.body.prebooking_charge = parseFloat(req.body.prebooking_charge);
+  }
+  if (req.body.price !== undefined && req.body.price !== null && req.body.price !== '') {
+    req.body.price = parseFloat(req.body.price);
+  }
+  if (req.body.rate !== undefined && req.body.rate !== null && req.body.rate !== '') {
+    req.body.rate = parseFloat(req.body.rate);
+  }
+  if (req.body.admin_commission_rate !== undefined && req.body.admin_commission_rate !== null && req.body.admin_commission_rate !== '') {
+    req.body.admin_commission_rate = parseFloat(req.body.admin_commission_rate);
+  }
 
   // 3. Parse JSON arrays if they exist
   if (req.body.custom_fields && typeof req.body.custom_fields === 'string') {

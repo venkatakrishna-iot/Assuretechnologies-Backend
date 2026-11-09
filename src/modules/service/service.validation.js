@@ -36,14 +36,27 @@ const createServiceSchema = z.object({
 
 const updateServiceSchema = z.object({
   name: z.string().trim().min(2, 'Name must be at least 2 characters').optional(),
+  category_id: z.string().trim().uuid('Invalid category ID').optional().nullable().or(z.literal('')),
   category: z.string().trim().optional(),
-  pricing_type_id: z.string().uuid('Invalid pricing type ID').optional().nullable(),
-  rate: z.coerce.number().min(0).optional().nullable(),
-  required_partner_type_id: z.string().uuid('Invalid partner type ID').optional().nullable(),
+  pricing_type_id: z.string().trim().uuid('Invalid pricing type ID').optional().nullable().or(z.literal('')),
+  price: z.coerce.number().min(0, 'Price cannot be negative').optional().nullable(),
+  rate: z.coerce.number().min(0, 'Rate cannot be negative').optional().nullable(),
+  required_partner_type_id: z.string().trim().uuid('Invalid partner type ID').optional().nullable().or(z.literal('')),
   admin_commission_rate: z.coerce.number().min(0).max(100).optional().nullable(),
   image: z.string().url('Image must be a valid URL').optional().nullable(),
   prebooking_charge: z.coerce.number().min(0).optional().nullable(),
   custom_fields: z.array(z.any()).optional().nullable()
+}).transform(data => {
+  if (data.price === undefined && data.rate !== undefined) {
+    data.price = data.rate;
+  }
+  if (!data.category_id && data.category && /^[0-9a-fA-F-]{36}$/.test(data.category)) {
+    data.category_id = data.category;
+  }
+  if (data.pricing_type_id === '') data.pricing_type_id = null;
+  if (data.required_partner_type_id === '') data.required_partner_type_id = null;
+  if (data.category_id === '') data.category_id = null;
+  return data;
 });
 
 const toggleServiceStatusSchema = z.object({
