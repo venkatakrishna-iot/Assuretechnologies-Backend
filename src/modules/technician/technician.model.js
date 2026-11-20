@@ -63,6 +63,14 @@ const Technician = sequelize.define('Technician', {
   force_password_change: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
+  },
+  id_proof: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  noc_document: {
+    type: DataTypes.STRING,
+    allowNull: true,
   }
 }, {
   timestamps: true,

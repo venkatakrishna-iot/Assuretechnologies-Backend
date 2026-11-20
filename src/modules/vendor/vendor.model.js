@@ -69,6 +69,18 @@ const Vendor = sequelize.define('Vendor', {
   is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
+  },
+  aadhar_proof: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  pan_proof: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  shop_photo: {
+    type: DataTypes.STRING,
+    allowNull: true,
   }
 }, {
   timestamps: true,
