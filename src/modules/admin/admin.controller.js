@@ -25,6 +25,21 @@ const createVendor = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: vendor });
 });
 
+const updateVendor = asyncHandler(async (req, res) => {
+  const vendor = await adminService.updateVendor(req.params.id, req.body, req.files);
+  res.status(200).json({ success: true, message: 'Vendor updated successfully', data: vendor });
+});
+
+const toggleVendorStatus = asyncHandler(async (req, res) => {
+  const vendor = await adminService.toggleVendorStatus(req.params.id, req.body.is_active);
+  res.status(200).json({ success: true, message: 'Vendor status updated successfully', data: vendor });
+});
+
+const deleteVendor = asyncHandler(async (req, res) => {
+  const result = await adminService.deleteVendor(req.params.id);
+  res.status(200).json({ success: true, message: result.message });
+});
+
 const createTechnician = asyncHandler(async (req, res) => {
   const technician = await adminService.createTechnician(req.body, req.files);
   res.status(201).json({ success: true, data: technician });
@@ -134,6 +149,9 @@ module.exports = {
   getVendors,
   getTechnicians,
   createVendor,
+  updateVendor,
+  toggleVendorStatus,
+  deleteVendor,
   createTechnician,
   updateTechnician,
   toggleTechnicianStatus,

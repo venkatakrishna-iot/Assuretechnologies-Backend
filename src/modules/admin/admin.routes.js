@@ -46,6 +46,10 @@ router.post('/refunds/:orderId/reject', orderController.rejectRefund);
 
 // Provider creation endpoints
 router.post('/vendors', uploadVendor.fields([{ name: 'aadhar_proof', maxCount: 1 }, { name: 'pan_proof', maxCount: 1 }, { name: 'shop_photo', maxCount: 1 }]), validateRequest(authSchemas.vendorRegisterSchema), adminController.createVendor);
+router.put('/vendors/:id', uploadVendor.fields([{ name: 'aadhar_proof', maxCount: 1 }, { name: 'pan_proof', maxCount: 1 }, { name: 'shop_photo', maxCount: 1 }]), adminController.updateVendor);
+router.patch('/vendors/:id/status', adminController.toggleVendorStatus);
+router.delete('/vendors/:id', adminController.deleteVendor);
+
 router.post('/technicians', uploadTechnician.fields([{ name: 'id_proof', maxCount: 1 }, { name: 'noc_document', maxCount: 1 }]), validateRequest(authSchemas.technicianRegisterSchema), adminController.createTechnician);
 
 router.put('/technicians/:id', uploadTechnician.fields([{ name: 'id_proof', maxCount: 1 }, { name: 'noc_document', maxCount: 1 }]), adminController.updateTechnician);

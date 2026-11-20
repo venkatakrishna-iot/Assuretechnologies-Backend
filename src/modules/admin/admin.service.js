@@ -191,6 +191,98 @@ const createVendor = async (data, files) => {
   return vendor;
 };
 
+const updateVendor = async (id, data, files) => {
+  const vendor = await Vendor.findByPk(id);
+  if (!vendor) throw new AppError('Vendor not found', 404);
+
+  const {
+    email,
+    mobile,
+    password,
+    full_name,
+    business_name,
+    address,
+    gst_number,
+    gst_state_code,
+    pincode,
+    business_description,
+    bank_account_details,
+    is_active
+  } = data;
+
+  if (email && email !== vendor.email) {
+    const existing = await Vendor.findOne({ where: { email, id: { [Op.ne]: id } } });
+    if (existing) throw new AppError('Email already registered', 400);
+  }
+
+  if (mobile && mobile !== vendor.mobile) {
+    const existing = await Vendor.findOne({ where: { mobile, id: { [Op.ne]: id } } });
+    if (existing) throw new AppError('Mobile already registered', 400);
+  }
+
+  const updates = {};
+  if (full_name !== undefined) updates.full_name = full_name;
+  if (business_name !== undefined) updates.business_name = business_name;
+  if (email !== undefined) updates.email = email;
+  if (mobile !== undefined) updates.mobile = mobile;
+  if (address !== undefined) updates.address = address;
+  if (gst_number !== undefined) {
+    updates.gst_number = gst_number;
+    updates.gst_state_code = gst_state_code || (gst_number ? String(gst_number).trim().slice(0, 2) : '37');
+  } else if (gst_state_code !== undefined) {
+    updates.gst_state_code = gst_state_code;
+  }
+  if (pincode !== undefined) updates.pincode = pincode;
+  if (business_description !== undefined) updates.business_description = business_description;
+  if (bank_account_details !== undefined) updates.bank_account_details = bank_account_details;
+  if (is_active !== undefined) updates.is_active = Boolean(is_active);
+
+  if (password && password.trim().length >= 6) {
+    updates.password_hash = await hashPassword(password);
+  }
+
+  if (files && files.aadhar_proof && files.aadhar_proof[0]) {
+    updates.aadhar_proof = files.aadhar_proof[0].path;
+  }
+  if (files && files.pan_proof && files.pan_proof[0]) {
+    updates.pan_proof = files.pan_proof[0].path;
+  }
+  if (files && files.shop_photo && files.shop_photo[0]) {
+    updates.shop_photo = files.shop_photo[0].path;
+  }
+
+  await vendor.update(updates);
+  return vendor;
+};
+
+const toggleVendorStatus = async (id, is_active) => {
+  const vendor = await Vendor.findByPk(id);
+  if (!vendor) throw new AppError('Vendor not found', 404);
+  await vendor.update({ is_active: Boolean(is_active) });
+  return vendor;
+};
+
+const deleteVendor = async (id) => {
+  const vendor = await Vendor.findByPk(id);
+  if (!vendor) throw new AppError('Vendor not found', 404);
+
+  // Check if vendor has products
+  const productCount = await Product.count({ where: { vendor_id: id } });
+  if (productCount > 0) {
+    throw new AppError(`Cannot delete vendor with ${productCount} associated product(s). Please deactivate the vendor instead or remove the products first.`, 400);
+  }
+
+  // Check if vendor has invoices
+  const Invoice = require('../invoice/invoice.model');
+  const invoiceCount = await Invoice.count({ where: { vendor_id: id } });
+  if (invoiceCount > 0) {
+    throw new AppError('Cannot delete vendor with associated invoices. Please deactivate the vendor instead.', 400);
+  }
+
+  await vendor.destroy();
+  return { message: 'Vendor deleted successfully' };
+};
+
 const createTechnician = async (data, files) => {
   const { email, mobile, password, full_name, address, service_pincodes, services_provided } = data;
 
@@ -1002,6 +1094,9 @@ module.exports = {
   getVendors,
   getTechnicians,
   createVendor,
+  updateVendor,
+  toggleVendorStatus,
+  deleteVendor,
   createTechnician,
   updateTechnician,
   toggleTechnicianStatus,
